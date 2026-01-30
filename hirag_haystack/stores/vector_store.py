@@ -315,9 +315,10 @@ class ChunkVectorStore:
         if chunk_id in self._chunk_index:
             return self._chunk_index[chunk_id]
 
-        # Try to get from document store using get_doc_by_id
-        doc = self._store.get_doc_by_id(chunk_id)
-        if doc:
+        # Try to get from document store using filter_documents
+        docs = self._store.filter_documents(filters={"field": "id", "operator": "==", "value": chunk_id})
+        if docs:
+            doc = docs[0]
             return {
                 "id": doc.id,
                 "content": doc.content,
