@@ -9,11 +9,11 @@ Implements:
 - Cluster sparsity calculation for dynamic layer determination
 """
 
-from typing import Any
 
 from haystack import component
 
-from hirag_haystack.core.community import Community, SingleCommunitySchema
+from hirag_haystack._logging import get_logger
+from hirag_haystack.core.community import Community
 from hirag_haystack.stores.base import GraphDocumentStore
 
 
@@ -111,6 +111,9 @@ class CommunityDetector:
         self.sparsity_threshold = sparsity_threshold
         self.max_levels = max_levels
 
+        # Logger
+        self._logger = get_logger("community_detector")
+
     @component.output_types(communities=dict)
     def run(
         self,
@@ -130,6 +133,8 @@ class CommunityDetector:
 
         # Use the graph store's clustering implementation
         communities = graph_store.clustering(algorithm=self.algorithm)
+
+        self._logger.info(f"Detected {len(communities)} communities")
 
         return {"communities": communities}
 
@@ -338,7 +343,6 @@ class CommunityDetector:
         Returns:
             List of feature vectors.
         """
-        import numpy as np
 
         features = []
         for comm in community_info:

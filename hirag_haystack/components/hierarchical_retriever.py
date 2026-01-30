@@ -9,13 +9,11 @@ This component implements the multi-mode retrieval strategy, supporting:
 """
 
 import json
-from typing import Any, Optional
+from typing import Any
 
 from haystack import component
-from haystack.dataclasses import Document
 
-from hirag_haystack.core.community import Community
-from hirag_haystack.core.graph import Entity, Relation
+from hirag_haystack._logging import get_logger, trace
 from hirag_haystack.core.query_param import QueryParam
 from hirag_haystack.stores.base import GraphDocumentStore
 
@@ -125,6 +123,9 @@ class HierarchicalRetriever:
         self.top_k = top_k
         self.top_m = top_m
 
+        # Logger
+        self._logger = get_logger("hierarchical_retriever")
+
     @component.output_types(context=str)
     def run(
         self,
@@ -150,28 +151,41 @@ class HierarchicalRetriever:
         """
         param = param or QueryParam(mode=mode)
 
+        entity_count = len(retrieved_entities) if retrieved_entities else 0
+        self._logger.info(f"Retrieval mode={mode}, entities={entity_count}")
+
         if mode == "naive":
-            return {"context": self._naive_retrieve(query, param)}
+            context = self._naive_retrieve(query, param)
+            self._logger.debug(f"Naive context length={len(context)}")
+            return {"context": context}
         elif mode == "hi_local":
-            return {"context": self._local_retrieve(
-                query, retrieved_entities, param
-            )}
+            context = self._local_retrieve(query, retrieved_entities, param)
+            self._logger.debug(f"Local context length={len(context)}")
+            return {"context": context}
         elif mode == "hi_global":
-            return {"context": self._global_retrieve(
+            context = self._global_retrieve(
                 query, retrieved_entities, communities, community_reports, param
-            )}
+            )
+            self._logger.debug(f"Global context length={len(context)}")
+            return {"context": context}
         elif mode == "hi_bridge":
-            return {"context": self._bridge_retrieve(
+            context = self._bridge_retrieve(
                 query, retrieved_entities, communities, param
-            )}
+            )
+            self._logger.debug(f"Bridge context length={len(context)}")
+            return {"context": context}
         elif mode == "hi":
-            return {"context": self._hierarchical_retrieve(
+            context = self._hierarchical_retrieve(
                 query, retrieved_entities, communities, community_reports, param
-            )}
+            )
+            self._logger.debug(f"Hierarchical context length={len(context)}")
+            return {"context": context}
         elif mode == "hi_nobridge":
-            return {"context": self._nobridge_retrieve(
+            context = self._nobridge_retrieve(
                 query, retrieved_entities, communities, community_reports, param
-            )}
+            )
+            self._logger.debug(f"No-bridge context length={len(context)}")
+            return {"context": context}
         else:
             return {"context": ""}
 
@@ -200,6 +214,7 @@ class HierarchicalRetriever:
             return self._naive_retrieve(query, param)
 
         entity_names = [e.get("entity_name") for e in retrieved_entities[:param.top_k]]
+        self._logger.debug(f"Local retrieve: {len(entity_names)} entities")
 
         # Get entity details
         entities_section = self._build_entities_section(entity_names)
@@ -232,6 +247,7 @@ class HierarchicalRetriever:
         relevant_communities = self._find_relevant_communities(
             entity_names, communities, param
         )
+        self._logger.debug(f"Global retrieve: {len(relevant_communities)} relevant communities")
 
         # Build sections
         communities_section = self._build_communities_section(
@@ -262,9 +278,11 @@ class HierarchicalRetriever:
         key_entities = self._find_key_entities_per_community(
             entity_names, communities, param
         )
+        self._logger.debug(f"Bridge retrieve: {len(key_entities)} key entities")
 
         # Find reasoning path
         path = self._find_reasoning_path(key_entities)
+        trace(self._logger, f"Reasoning path length: {len(path)}")
         path_section = self._build_path_section(path)
 
         text_units_section = self._build_text_units_section(entity_names[:param.top_k])

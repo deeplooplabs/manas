@@ -5,10 +5,23 @@ to Haystack Document objects using the appropriate converters based on file type
 """
 
 import glob as glob_module
+import hashlib
 from pathlib import Path
 from typing import Any
 
 from haystack.dataclasses import Document, ByteStream
+
+
+def _compute_doc_id(content: str) -> str:
+    """Compute a deterministic document ID from content using MD5 hash.
+
+    Args:
+        content: Document content.
+
+    Returns:
+        MD5 hash hex string (32 characters).
+    """
+    return hashlib.md5(content.encode("utf-8")).hexdigest()
 
 
 # ===== EXTENSION TO CONVERTER MAPPING =====
@@ -192,8 +205,9 @@ class DocumentLoader:
             result = converter.run(sources=file_paths)
             docs = result.get("documents", [])
 
-            # Add source file metadata
+            # Set document ID from path hash and add source metadata
             for doc, path in zip(docs, file_paths):
+                doc.id = _compute_doc_id(str(path))
                 if doc.meta is None:
                     doc.meta = {}
                 doc.meta["source_file"] = str(path)
@@ -232,9 +246,8 @@ class DocumentLoader:
         if not streams:
             return []
 
-        # Group streams by inferred file type
-        streams_by_ext: dict[str, list[ByteStream]] = {}
-        url_to_ext: dict[str, str] = {}
+        # Group streams by inferred file type, maintain stream to URL mapping
+        streams_by_ext: dict[str, list[tuple[ByteStream, str]]] = {}
 
         for stream, url in zip(streams, urls):
             # Determine extension from MIME type or URL
@@ -243,34 +256,30 @@ class DocumentLoader:
             if not ext or mime_type == "application/octet-stream":
                 ext = _get_extension_from_url(url)
 
-            url_to_ext[url] = ext
             if ext not in streams_by_ext:
                 streams_by_ext[ext] = []
-            streams_by_ext[ext].append(stream)
+            streams_by_ext[ext].append((stream, url))
 
         documents: list[Document] = []
 
-        for ext, byte_streams in streams_by_ext.items():
+        for ext, stream_url_pairs in streams_by_ext.items():
             if self.verbose:
-                print(f"Converting {len(byte_streams)} {ext} stream(s)...")
+                print(f"Converting {len(stream_url_pairs)} {ext} stream(s)...")
 
             converter = self._get_converter(ext)
+            byte_streams = [pair[0] for pair in stream_url_pairs]
             # All Haystack converters accept ByteStream in their sources parameter
             result = converter.run(sources=byte_streams)
             docs = result.get("documents", [])
-            documents.extend(docs)
 
-        # Add source URL metadata
-        for doc in documents:
-            if doc.meta is None:
-                doc.meta = {}
-            # The source URL is often in meta["url"] from the fetcher
-            if "url" not in doc.meta:
-                # Try to match back to original URL
-                for url in urls:
-                    if url not in [d.meta.get("source_url") for d in documents]:
-                        doc.meta["source_url"] = url
-                        break
+            # Set document ID from URL hash and add source URL metadata
+            for doc, (stream, url) in zip(docs, stream_url_pairs):
+                doc.id = _compute_doc_id(url)
+                if doc.meta is None:
+                    doc.meta = {}
+                doc.meta["source_url"] = url
+
+            documents.extend(docs)
 
         return documents
 

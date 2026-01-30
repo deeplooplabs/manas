@@ -10,30 +10,27 @@ This module implements the document indexing pipeline that:
 """
 
 import json
-from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from haystack import Pipeline, component
 from haystack.dataclasses import Document
 from haystack.components.preprocessors import DocumentSplitter
-from haystack.components.writers import DocumentWriter
 
+from hirag_haystack._logging import get_logger
 from hirag_haystack.components.entity_extractor import (
     EntityExtractor,
-    EntityExtractionResult,
-    merge_entities,
-    merge_relations,
 )
 from hirag_haystack.components.community_detector import CommunityDetector
 from hirag_haystack.components.report_generator import CommunityReportGenerator
-from hirag_haystack.core.graph import Entity, Relation
 from hirag_haystack.stores.base import GraphDocumentStore
 from hirag_haystack.stores.networkx_store import NetworkXGraphStore
-from hirag_haystack.stores.vector_store import EntityVectorStore, ChunkVectorStore, KVStore, DocIdIndex
+from hirag_haystack.stores.vector_store import (
+    KVStore,
+    DocIdIndex,
+)
 from hirag_haystack.utils.token_utils import (
     compute_mdhash_id,
     count_tokens,
-    truncate_string_by_token_size,
 )
 
 
@@ -201,41 +198,42 @@ class HiRAGIndexingPipeline:
         self._communities: dict = {}
         self._reports: dict = {}
 
+        # Logger
+        self._logger = get_logger("indexing")
+
         # Load existing data
         self._load_state()
 
     def index(
         self,
-        documents: list[Document] | list[str] | str,
-        doc_ids: list[str] | None = None,
+        documents: list[Document],
     ) -> dict:
         """Index documents into the HiRAG system.
 
         Args:
-            documents: Documents to index. Can be:
-                - List of Document objects
-                - List of strings (treated as document content)
-                - Single string (treated as single document content)
-            doc_ids: Optional list of external document IDs. Must match
-                the number of documents if provided.
+            documents: List of Haystack Document objects to index.
+                Use ``Document(id=..., content=...)`` to assign document IDs.
 
         Returns:
             Dictionary with indexing statistics.
         """
-        # Normalize input to Document objects
-        docs = self._normalize_documents(documents, doc_ids=doc_ids)
+        docs = documents
 
         if not docs:
             return {"status": "no_documents", "count": 0}
 
+        self._logger.info(f"Indexing {len(docs)} documents")
+
         # Step 1: Split documents into chunks
         chunks = self._split_documents(docs)
+        self._logger.debug(f"Split into {len(chunks)} chunks")
 
         # Step 2: Extract entities and relations
         if self.entity_extractor:
             extraction_result = self.entity_extractor.run(documents=chunks)
             entities = extraction_result.get("entities", [])
             relations = extraction_result.get("relations", [])
+            self._logger.debug(f"Extracted {len(entities)} entities, {len(relations)} relations")
         else:
             entities = []
             relations = []
@@ -243,10 +241,12 @@ class HiRAGIndexingPipeline:
         # Step 3: Index into graph store
         graph_indexer = GraphIndexer(self.graph_store)
         graph_indexer.run(entities=entities, relations=relations)
+        self._logger.debug(f"Indexed {len(entities)} nodes, {len(relations)} edges")
 
         # Step 4: Detect communities
         communities_result = self.community_detector.run(graph_store=self.graph_store)
         self._communities = communities_result.get("communities", {})
+        self._logger.debug(f"Detected {len(self._communities)} communities")
 
         # Step 5: Generate reports
         if self.report_generator and self._communities:
@@ -255,6 +255,7 @@ class HiRAGIndexingPipeline:
                 communities=self._communities,
             )
             self._reports = reports_result.get("reports", {})
+            self._logger.debug(f"Generated {len(self._reports)} community reports")
 
         # Step 6: Update vector stores
         if self.entity_vector_store and entities:
@@ -282,30 +283,24 @@ class HiRAGIndexingPipeline:
             self.chunk_vector_store.upsert(chunk_data)
             self.chunk_vector_store.save_to_disk()
 
-        # Update doc_id_index if doc_ids were provided
-        if doc_ids:
-            # Build mapping: doc.id -> doc_id
-            doc_id_map = {}
-            for doc, ext_id in zip(docs, doc_ids):
-                doc_id_map[doc.id or f"doc_{docs.index(doc)}"] = ext_id
+        # Update doc_id_index for documents with explicit (user-set) IDs.
+        # Haystack auto-generates a content-hash ID when none is provided,
+        # so we compare against _create_id() to detect explicit IDs.
+        docs_with_ids = [d for d in docs if d.id and d.id != d._create_id()]
+        if docs_with_ids:
+            for doc in docs_with_ids:
+                # Track chunks belonging to this document
+                for chunk in chunks:
+                    if chunk.meta.get("source_doc_id") == doc.id:
+                        chunk_hash = compute_mdhash_id(chunk.content[:200], prefix="chunk-")
+                        self.doc_id_index.add_chunks(doc.id, [chunk_hash])
 
-            # Track chunk_ids per doc_id
-            for chunk in chunks:
-                source_doc_id = chunk.meta.get("source_doc_id", "")
-                ext_id = doc_id_map.get(source_doc_id)
-                if ext_id:
-                    chunk_hash = compute_mdhash_id(chunk.content[:200], prefix="chunk-")
-                    self.doc_id_index.add_chunks(ext_id, [chunk_hash])
-
-            # Track entity_names per doc_id
-            for entity in entities:
-                # entity.source_id may contain chunk source references
-                for doc_internal_id, ext_id in doc_id_map.items():
-                    # Check if entity came from any chunk of this document
-                    doc_chunk_ids = self.doc_id_index.get_chunks(ext_id)
+                # Track entities belonging to this document
+                doc_chunk_ids = self.doc_id_index.get_chunks(doc.id)
+                for entity in entities:
                     entity_sources = set(entity.source_id.split("|")) if entity.source_id else set()
                     if entity_sources & set(doc_chunk_ids):
-                        self.doc_id_index.add_entities(ext_id, [entity.entity_name])
+                        self.doc_id_index.add_entities(doc.id, [entity.entity_name])
 
             self.doc_id_index.save_to_disk()
 
@@ -321,41 +316,6 @@ class HiRAGIndexingPipeline:
             "communities_count": len(self._communities),
         }
 
-    def _normalize_documents(
-        self,
-        documents: list[Document] | list[str] | str,
-        doc_ids: list[str] | None = None,
-    ) -> list[Document]:
-        """Normalize various input formats to Document objects.
-
-        Args:
-            documents: Documents to normalize.
-            doc_ids: Optional external document IDs. If provided, must match
-                the number of documents.
-        """
-        if isinstance(documents, str):
-            documents = [documents]
-
-        if doc_ids is not None and len(doc_ids) != len(documents):
-            raise ValueError(
-                f"doc_ids length ({len(doc_ids)}) must match "
-                f"documents length ({len(documents)})"
-            )
-
-        result = []
-        for idx, doc in enumerate(documents):
-            if isinstance(doc, Document):
-                if doc_ids is not None:
-                    doc.id = doc_ids[idx]
-                result.append(doc)
-            elif isinstance(doc, str):
-                doc_id = doc_ids[idx] if doc_ids is not None else None
-                result.append(Document(id=doc_id, content=doc))
-            else:
-                raise ValueError(f"Unsupported document type: {type(doc)}")
-
-        return result
-
     def _split_documents(self, documents: list[Document]) -> list[Document]:
         """Split documents into chunks."""
         # Simple character-based splitting (in production, use tokenizer)
@@ -368,16 +328,20 @@ class HiRAGIndexingPipeline:
             meta["source_doc_id"] = doc.id or f"doc_{doc_idx}"
 
             for i in range(0, len(content), chunk_size_chars - self.chunk_overlap):
-                chunk_content = content[i:i + chunk_size_chars]
+                chunk_content = content[i : i + chunk_size_chars]
                 chunk_meta = meta.copy()
                 chunk_meta["chunk_index"] = i // (chunk_size_chars - self.chunk_overlap)
                 chunk_meta["chunk_order_index"] = chunk_meta["chunk_index"]
 
-                chunks.append(Document(
-                    content=chunk_content,
-                    meta=chunk_meta,
-                    id=f"{doc.id}_chunk_{chunk_meta['chunk_index']}" if doc.id else f"chunk_{len(chunks)}",
-                ))
+                chunks.append(
+                    Document(
+                        content=chunk_content,
+                        meta=chunk_meta,
+                        id=f"{doc.id}_chunk_{chunk_meta['chunk_index']}"
+                        if doc.id
+                        else f"chunk_{len(chunks)}",
+                    )
+                )
 
         return chunks
 
@@ -403,9 +367,8 @@ class HiRAGIndexingPipeline:
 
     def index_incremental(
         self,
-        documents: list[Document] | list[str] | str,
+        documents: list[Document],
         force_reindex: bool = False,
-        doc_ids: list[str] | None = None,
     ) -> dict:
         """Index documents with incremental update support.
 
@@ -413,18 +376,18 @@ class HiRAGIndexingPipeline:
         For truly new content, updates communities and reports incrementally.
 
         Args:
-            documents: Documents to index.
+            documents: List of Haystack Document objects to index.
             force_reindex: If True, reindex all documents (ignores existing).
-            doc_ids: Optional list of external document IDs.
 
         Returns:
             Dictionary with indexing statistics.
         """
-        # Normalize to Document objects
-        docs = self._normalize_documents(documents, doc_ids=doc_ids)
+        docs = documents
 
         if not docs:
             return {"status": "no_documents", "count": 0}
+
+        self._logger.info(f"Incremental indexing {len(docs)} documents (force_reindex={force_reindex})")
 
         # Compute hashes for deduplication
         new_docs = {}
@@ -440,6 +403,7 @@ class HiRAGIndexingPipeline:
             new_docs[doc_hash] = {"content": content}
 
         if not new_docs:
+            self._logger.debug("All documents already indexed")
             return {"status": "all_existing", "new_count": 0, "count": len(docs)}
 
         # Split into chunks
@@ -451,17 +415,20 @@ class HiRAGIndexingPipeline:
         new_chunks = {k: v for k, v in chunks.items() if k in new_chunk_hashes}
 
         if not new_chunks:
+            self._logger.debug("All chunks already exist")
             return {"status": "all_existing", "new_count": len(new_docs), "chunks_count": 0}
+
+        self._logger.debug(f"Processing {len(new_chunks)} new chunks")
 
         # Extract entities and relations
         if self.entity_extractor:
             chunk_docs = [
-                Document(id=k, content=v.get("content", ""), meta=v)
-                for k, v in new_chunks.items()
+                Document(id=k, content=v.get("content", ""), meta=v) for k, v in new_chunks.items()
             ]
             extraction_result = self.entity_extractor.run(documents=chunk_docs)
             entities = extraction_result.get("entities", [])
             relations = extraction_result.get("relations", [])
+            self._logger.debug(f"Extracted {len(entities)} entities, {len(relations)} relations")
         else:
             entities = []
             relations = []
@@ -469,11 +436,13 @@ class HiRAGIndexingPipeline:
         # Index into graph
         graph_indexer = GraphIndexer(self.graph_store)
         graph_indexer.run(entities=entities, relations=relations)
+        self._logger.debug(f"Indexed {len(entities)} nodes, {len(relations)} edges")
 
         # Update communities (drop and regenerate for simplicity)
         # TODO: Implement true incremental community update
         self.community_detector.run(graph_store=self.graph_store)
         self._communities = self.graph_store.community_schema()
+        self._logger.debug(f"Updated {len(self._communities)} communities")
 
         # Update reports
         if self.report_generator and self._communities:
@@ -532,11 +501,8 @@ class HiRAGIndexingPipeline:
             content = doc_data["content"]
 
             for i in range(0, len(content), chunk_size_chars - self.chunk_overlap):
-                chunk_content = content[i:i + chunk_size_chars]
-                chunk_hash = compute_mdhash_id(
-                    f"{doc_hash}_{i}",
-                    prefix="chunk-"
-                )
+                chunk_content = content[i : i + chunk_size_chars]
+                chunk_hash = compute_mdhash_id(f"{doc_hash}_{i}", prefix="chunk-")
 
                 chunks[chunk_hash] = {
                     "content": chunk_content,
@@ -552,6 +518,7 @@ class HiRAGIndexingPipeline:
         # Save communities (convert Community objects to dicts for serialization)
         comm_store = KVStore("communities", self.working_dir)
         from hirag_haystack.core.community import Community
+
         serializable_communities = {}
         for k, v in self._communities.items():
             if isinstance(v, Community):
@@ -688,8 +655,7 @@ class HiRAGIndexingPipeline:
         """
         delete_result = self.delete_document(doc_id)
         index_result = self.index(
-            documents=[content],
-            doc_ids=[doc_id],
+            documents=[Document(id=doc_id, content=content)],
         )
         return {
             "status": "updated",

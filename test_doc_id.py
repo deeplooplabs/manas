@@ -12,6 +12,8 @@ from pathlib import Path
 
 import pytest
 
+from haystack.dataclasses import Document
+
 from hirag_haystack import HiRAG
 from hirag_haystack.stores.vector_store import DocIdIndex, ChunkVectorStore, EntityVectorStore, KVStore
 from hirag_haystack.stores.networkx_store import NetworkXGraphStore
@@ -211,8 +213,10 @@ class TestNetworkXGraphStoreDelete:
 class TestPipelineDocId:
     def test_index_with_doc_ids(self, pipeline):
         result = pipeline.index(
-            documents=["Content about AI.", "Content about ML."],
-            doc_ids=["doc_ai", "doc_ml"],
+            documents=[
+                Document(id="doc_ai", content="Content about AI."),
+                Document(id="doc_ml", content="Content about ML."),
+            ],
         )
         assert result["status"] == "success"
         assert result["documents_count"] == 2
@@ -220,23 +224,15 @@ class TestPipelineDocId:
         assert pipeline.has_document("doc_ml")
         assert sorted(pipeline.list_documents()) == ["doc_ai", "doc_ml"]
 
-    def test_doc_ids_length_mismatch_raises(self, pipeline):
-        with pytest.raises(ValueError, match="doc_ids length"):
-            pipeline.index(
-                documents=["Content 1", "Content 2"],
-                doc_ids=["only_one"],
-            )
-
     def test_index_without_doc_ids(self, pipeline):
-        result = pipeline.index(documents=["Some content"])
+        result = pipeline.index(documents=[Document(content="Some content")])
         assert result["status"] == "success"
-        # No doc_id tracking when doc_ids not provided
+        # No doc_id tracking when documents have no IDs
         assert pipeline.list_documents() == []
 
     def test_delete_document(self, pipeline):
         pipeline.index(
-            documents=["Delete me content."],
-            doc_ids=["to_delete"],
+            documents=[Document(id="to_delete", content="Delete me content.")],
         )
         assert pipeline.has_document("to_delete")
 
@@ -251,8 +247,11 @@ class TestPipelineDocId:
 
     def test_delete_multiple_documents(self, pipeline):
         pipeline.index(
-            documents=["Doc A content", "Doc B content", "Doc C content"],
-            doc_ids=["a", "b", "c"],
+            documents=[
+                Document(id="a", content="Doc A content"),
+                Document(id="b", content="Doc B content"),
+                Document(id="c", content="Doc C content"),
+            ],
         )
         result = pipeline.delete_documents(["a", "c"])
         assert result["total_deleted"] == 2
@@ -260,8 +259,7 @@ class TestPipelineDocId:
 
     def test_update_document(self, pipeline):
         pipeline.index(
-            documents=["Original content."],
-            doc_ids=["updatable"],
+            documents=[Document(id="updatable", content="Original content.")],
         )
         assert pipeline.has_document("updatable")
 
@@ -273,13 +271,13 @@ class TestPipelineDocId:
 
     def test_list_documents(self, pipeline):
         assert pipeline.list_documents() == []
-        pipeline.index(documents=["A"], doc_ids=["d1"])
-        pipeline.index(documents=["B"], doc_ids=["d2"])
+        pipeline.index(documents=[Document(id="d1", content="A")])
+        pipeline.index(documents=[Document(id="d2", content="B")])
         assert sorted(pipeline.list_documents()) == ["d1", "d2"]
 
     def test_has_document(self, pipeline):
         assert not pipeline.has_document("x")
-        pipeline.index(documents=["Content"], doc_ids=["x"])
+        pipeline.index(documents=[Document(id="x", content="Content")])
         assert pipeline.has_document("x")
 
 
@@ -303,8 +301,8 @@ class TestSharedEntitySurvival:
         )
 
         # Simulate indexing two docs with a shared entity
-        pipeline.index(documents=["Doc about Python."], doc_ids=["doc1"])
-        pipeline.index(documents=["Doc about Java."], doc_ids=["doc2"])
+        pipeline.index(documents=[Document(id="doc1", content="Doc about Python.")])
+        pipeline.index(documents=[Document(id="doc2", content="Doc about Java.")])
 
         # Manually add a shared entity to graph + index
         # (since no entity_extractor, we simulate directly)
@@ -352,7 +350,10 @@ class TestPersistenceAfterDelete:
             working_dir=tmp_dir,
         )
 
-        pipeline.index(documents=["Keep me", "Delete me"], doc_ids=["keep", "del"])
+        pipeline.index(documents=[
+            Document(id="keep", content="Keep me"),
+            Document(id="del", content="Delete me"),
+        ])
         pipeline.delete_document("del")
 
         # Reload from disk
@@ -391,8 +392,8 @@ class TestProjectIdIsolation:
 
     def test_project_id_isolation(self, hirag):
         """Index into two projects and verify each only sees its own docs."""
-        hirag.index(["AI content"], doc_ids=["d1"], project_id="proj_a")
-        hirag.index(["ML content"], doc_ids=["d2"], project_id="proj_b")
+        hirag.index([Document(id="d1", content="AI content")], project_id="proj_a")
+        hirag.index([Document(id="d2", content="ML content")], project_id="proj_b")
 
         assert hirag.list_documents(project_id="proj_a") == ["d1"]
         assert hirag.list_documents(project_id="proj_b") == ["d2"]
@@ -404,7 +405,7 @@ class TestProjectIdIsolation:
 
     def test_default_project_id(self, hirag):
         """Omitting project_id uses 'default'."""
-        hirag.index(["Default content"], doc_ids=["d0"])
+        hirag.index([Document(id="d0", content="Default content")])
         assert hirag.list_documents() == ["d0"]
         assert hirag.list_documents(project_id="default") == ["d0"]
         assert hirag.has_document("d0")
@@ -412,14 +413,14 @@ class TestProjectIdIsolation:
 
     def test_default_does_not_leak_to_other_project(self, hirag):
         """Default project data is not visible in a named project."""
-        hirag.index(["Default content"], doc_ids=["d0"])
+        hirag.index([Document(id="d0", content="Default content")])
         assert hirag.list_documents(project_id="other") == []
         assert not hirag.has_document("d0", project_id="other")
 
     def test_delete_with_project_id(self, hirag):
         """Delete in one project does not affect another."""
-        hirag.index(["Content A"], doc_ids=["d1"], project_id="proj_a")
-        hirag.index(["Content B"], doc_ids=["d1"], project_id="proj_b")
+        hirag.index([Document(id="d1", content="Content A")], project_id="proj_a")
+        hirag.index([Document(id="d1", content="Content B")], project_id="proj_b")
 
         hirag.delete("d1", project_id="proj_a")
 
@@ -443,8 +444,8 @@ class TestProjectIdIsolation:
 
     def test_project_uses_separate_directories(self, hirag):
         """Each project stores data under {working_dir}/{project_id}/."""
-        hirag.index(["A"], doc_ids=["d1"], project_id="alpha")
-        hirag.index(["B"], doc_ids=["d2"], project_id="beta")
+        hirag.index([Document(id="d1", content="A")], project_id="alpha")
+        hirag.index([Document(id="d2", content="B")], project_id="beta")
 
         alpha_dir = Path(hirag.working_dir) / "alpha"
         beta_dir = Path(hirag.working_dir) / "beta"

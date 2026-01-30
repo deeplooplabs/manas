@@ -6,17 +6,17 @@ This module implements the query pipeline that:
 3. Generates answers using LLM
 """
 
-import json
-from typing import Any, Optional
+import time
+from typing import Any
 
 from haystack import Pipeline, component
-from haystack.dataclasses import Document
+from haystack.dataclasses.chat_message import ChatMessage
 
+from hirag_haystack._logging import get_logger
 from hirag_haystack.core.query_param import QueryParam
 from hirag_haystack.components.hierarchical_retriever import (
     EntityRetriever,
     HierarchicalRetriever,
-    ContextBuilder,
 )
 from hirag_haystack.stores.base import GraphDocumentStore
 
@@ -180,6 +180,9 @@ class HiRAGQueryPipeline:
         )
         self.prompt_builder = PromptBuilder()
 
+        # Logger
+        self._logger = get_logger("query")
+
     def query(
         self,
         query: str,
@@ -204,6 +207,8 @@ class HiRAGQueryPipeline:
         else:
             query_mode = self.default_mode
 
+        self._logger.info(f"Query mode={query_mode}, query_len={len(query)}")
+
         # Build query param if not provided
         if param is None:
             param = QueryParam(mode=query_mode, top_k=self.top_k, top_m=self.top_m)
@@ -215,6 +220,7 @@ class HiRAGQueryPipeline:
         if query_mode != "naive" and self.entity_store:
             result = self.entity_retriever.run(query=query)
             retrieved_entities = result.get("entities", [])
+            self._logger.debug(f"Retrieved {len(retrieved_entities)} entities")
 
         # Get communities and reports from graph store
         communities = getattr(self.graph_store, "_communities", {})
@@ -230,6 +236,7 @@ class HiRAGQueryPipeline:
             param=param,
         )
         context = context_result.get("context", "")
+        self._logger.debug(f"Context length={len(context)}")
 
         # If only context needed, return early
         if param.only_need_context:
@@ -270,13 +277,21 @@ class HiRAGQueryPipeline:
         if self.generator is None:
             return "No generator configured."
 
-        response = self.generator.run(prompt)
+        self._logger.debug(f"Generating answer (prompt_len={len(prompt)})")
+        start_time = time.time()
 
-        # Extract text from response (response is a dict from Haystack generators)
-        if isinstance(response, dict) and "replies" in response:
-            replies = response["replies"]
+        # Wrap prompt in a ChatMessage for Haystack 2.x compatibility
+        message = ChatMessage.from_user(prompt)
+        response = self.generator.run(messages=[message])
+
+        # Extract text from response
+        if hasattr(response, "replies"):
+            replies = response.replies
             if replies and len(replies) > 0:
-                return replies[0]
+                answer = replies[0].text if hasattr(replies[0], "text") else str(replies[0])
+                elapsed = time.time() - start_time
+                self._logger.debug(f"LLM response (len={len(answer)}, time={elapsed:.2f}s)")
+                return answer
 
         # Fallback for unexpected response format
         return str(response)

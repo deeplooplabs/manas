@@ -8,8 +8,10 @@ import json
 from typing import Any
 
 from haystack import component
+from haystack.dataclasses.chat_message import ChatMessage
 
-from hirag_haystack.core.community import Community, CommunitySchema
+from hirag_haystack._logging import get_logger
+from hirag_haystack.core.community import Community
 from hirag_haystack.stores.base import GraphDocumentStore
 
 
@@ -37,6 +39,9 @@ class CommunityReportGenerator:
         self.generator = generator
         self.max_tokens = max_tokens
 
+        # Logger
+        self._logger = get_logger("report_generator")
+
     @component.output_types(reports=dict)
     def run(
         self,
@@ -59,6 +64,8 @@ class CommunityReportGenerator:
         if self.generator is None:
             raise ValueError("Generator not configured. Provide a ChatGenerator.")
 
+        self._logger.info(f"Generating reports for {len(communities)} communities")
+
         reports = {}
 
         # Process communities by level (bottom-up)
@@ -68,6 +75,7 @@ class CommunityReportGenerator:
             level_communities = {
                 k: v for k, v in communities.items() if v.level == level
             }
+            self._logger.debug(f"Processing level {level}: {len(level_communities)} communities")
 
             for comm_id, community in level_communities.items():
                 report = self._generate_single_report(
@@ -75,6 +83,8 @@ class CommunityReportGenerator:
                 )
                 community.report_string = report
                 reports[comm_id] = report
+
+        self._logger.debug(f"Generated {len(reports)} reports")
 
         return {"reports": reports}
 
@@ -163,9 +173,14 @@ class CommunityReportGenerator:
         if self.generator is None:
             raise ValueError("Generator not configured.")
 
-        response = self.generator.run(prompt)
+        self._logger.debug(f"Calling LLM (prompt_len={len(prompt)})")
+        # Wrap prompt in a ChatMessage for Haystack 2.x compatibility
+        message = ChatMessage.from_user(prompt)
+        response = self.generator.run(messages=[message])
         if hasattr(response, "replies"):
-            return response.replies[0].text if response.replies else ""
+            result = response.replies[0].text if response.replies else ""
+            self._logger.debug(f"LLM response (len={len(result)})")
+            return result
         return str(response)
 
     def _get_report_prompt(self) -> str:

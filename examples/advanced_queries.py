@@ -13,6 +13,8 @@ from dotenv import load_dotenv
 from haystack.components.generators import OpenAIGenerator
 from haystack.document_stores.in_memory import InMemoryDocumentStore
 
+from haystack.dataclasses import Document
+
 from hirag_haystack import HiRAG, QueryParam
 from hirag_haystack.stores import EntityVectorStore, ChunkVectorStore
 
@@ -84,7 +86,7 @@ def main():
     """
 
     print("Indexing documents...")
-    result = hirag.index(documents)
+    result = hirag.index([Document(content=documents)])
     print(f"Indexed: {result}\n")
 
     # Example 1: Get context without generation

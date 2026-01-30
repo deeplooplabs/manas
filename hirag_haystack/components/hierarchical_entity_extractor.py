@@ -15,6 +15,7 @@ from typing import Any, Callable, List, Optional
 
 from haystack import component
 from haystack.dataclasses import Document
+from haystack.dataclasses.chat_message import ChatMessage
 
 from hirag_haystack.core.graph import Entity, Relation, NodeType
 from hirag_haystack.prompts import (
@@ -371,7 +372,9 @@ class HierarchicalEntityExtractor:
         if self.generator is None:
             raise ValueError("Generator not configured")
 
-        response = self.generator.run(prompt)
+        # Wrap prompt in a ChatMessage for Haystack 2.x compatibility
+        message = ChatMessage.from_user(prompt)
+        response = self.generator.run(messages=[message])
         if hasattr(response, "replies"):
             return response.replies[0].text if response.replies else ""
         return str(response)
