@@ -77,18 +77,18 @@ class DocumentUrlInput(BaseModel):
     meta: dict | None = Field(default=None, description="Optional metadata")
 
 
-class IndexRequest(BaseModel):
-    """Native HiRAG index request."""
+class AddDocumentsRequest(BaseModel):
+    """Request for adding documents to the knowledge graph."""
 
     documents: list[DocumentInput | DocumentUrlInput] = Field(
-        ..., min_length=1, description="Documents to index (content or URL)"
+        ..., min_length=1, description="Documents to add (content or URL)"
     )
     incremental: bool = Field(default=True, description="Skip already-indexed documents")
     force_reindex: bool = Field(default=False, description="Force reindex all documents")
 
 
-class IndexResponse(BaseModel):
-    """Native HiRAG index response."""
+class AddDocumentsResponse(BaseModel):
+    """Response for document addition."""
 
     status: str
     documents_count: int | None = None
@@ -98,6 +98,11 @@ class IndexResponse(BaseModel):
     entities_count: int | None = None
     relations_count: int | None = None
     communities_count: int | None = None
+
+
+# Backward compatibility aliases
+IndexRequest = AddDocumentsRequest
+IndexResponse = AddDocumentsResponse
 
 
 class GraphStatsResponse(BaseModel):

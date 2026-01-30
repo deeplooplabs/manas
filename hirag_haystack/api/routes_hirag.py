@@ -3,7 +3,7 @@
 Endpoints:
 - GET /api/health - Health check
 - POST /api/query - Query the knowledge graph
-- POST /api/index - Index documents
+- POST /api/documents - Add documents
 - GET /api/graph/stats - Get graph statistics
 - GET /api/documents - List all documents
 - HEAD /api/documents/{doc_id} - Check if document exists
@@ -24,6 +24,8 @@ from hirag_haystack.api.dependencies import (
     run_index_with_lock,
 )
 from hirag_haystack.api.models import (
+    AddDocumentsRequest,
+    AddDocumentsResponse,
     BatchDeleteRequest,
     BatchDeleteResponse,
     DocumentInput,
@@ -32,8 +34,6 @@ from hirag_haystack.api.models import (
     DocumentUrlInput,
     GraphStatsResponse,
     HealthResponse,
-    IndexRequest,
-    IndexResponse,
     QueryRequest,
     QueryResponse,
     VisualizeRequest,
@@ -98,13 +98,13 @@ async def query(
     )
 
 
-@router.post("/index", response_model=IndexResponse)
-async def index_documents(
-    request: IndexRequest,
+@router.post("/documents", response_model=AddDocumentsResponse)
+async def add_documents(
+    request: AddDocumentsRequest,
     project_id: str | None = Query(None, description="Project ID for data isolation"),
     hirag: HiRAG = Depends(get_hirag),
-) -> IndexResponse:
-    """Index documents into the HiRAG system.
+) -> AddDocumentsResponse:
+    """Add documents to the HiRAG knowledge graph.
 
     Documents are processed to extract entities and relations,
     detect communities, and generate community reports.
@@ -283,13 +283,13 @@ async def check_document(
         raise HTTPException(status_code=500, detail=f"Failed to check document: {str(e)}")
 
 
-@router.put("/documents/{doc_id}", response_model=IndexResponse)
+@router.put("/documents/{doc_id}", response_model=AddDocumentsResponse)
 async def update_document(
     doc_id: str,
     request: DocumentUpdateRequest,
     project_id: str | None = Query(None, description="Project ID for data isolation"),
     hirag: HiRAG = Depends(get_hirag),
-) -> IndexResponse:
+) -> AddDocumentsResponse:
     """Update a document's content.
 
     Deletes the existing document and re-indexes with new content.
@@ -302,7 +302,7 @@ async def update_document(
         result = await run_index_with_lock(
             lambda: hirag.update(doc_id=doc_id, content=request.content, project_id=pid)
         )
-        return IndexResponse(
+        return AddDocumentsResponse(
             status=result.get("status", "updated"),
             documents_count=result.get("documents_count"),
             new_documents=result.get("new_documents"),
