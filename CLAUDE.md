@@ -53,10 +53,10 @@ ManasRAG (facade)  →  Pipelines  →  Components  →  Stores
 | Mode | What it retrieves |
 |------|-------------------|
 | `naive` | Document chunks only |
-| `hi_local` | Entities + relations + chunks |
-| `hi_global` | Community reports + chunks |
-| `hi_bridge` | Cross-community reasoning paths |
-| `hi_nobridge` | Local + global combined (no paths) |
+| `local` | Entities + relations + chunks |
+| `global` | Community reports + chunks |
+| `bridge` | Cross-community reasoning paths |
+| `nobridge` | Local + global combined (no paths) |
 | `hi` | All: local + global + bridge |
 
 ### Storage Abstraction
