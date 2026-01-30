@@ -9,9 +9,10 @@ This project implements [HiRAG](https://github.com/hhy-huang/HiRAG) using the [H
 - **Hierarchical Knowledge Structure**: Uses Leiden clustering to build multi-level community hierarchies
 - **Multiple Retrieval Modes**:
   - `naive`: Basic RAG with document chunks
-  - `hi_local`: Local entity and relationship knowledge
-  - `hi_global`: Global community report knowledge
-  - `hi_bridge`: Cross-community reasoning paths
+  - `local`: Local entity and relationship knowledge
+  - `global`: Global community report knowledge
+  - `bridge`: Cross-community reasoning paths
+  - `nobridge`: Local + global combined (no paths)
   - `hi`: Full hierarchical retrieval combining all modes
 - **Flexible Storage**: Supports NetworkX (in-memory) and Neo4j graph databases
 - **Haystack Integration**: Built on Haystack's component and pipeline architecture
@@ -97,9 +98,10 @@ print(result["answer"])
 | Mode | Description | Components |
 |------|-------------|------------|
 | `naive` | Basic RAG | Document chunks only |
-| `hi_local` | Local knowledge | Entities + Relations + Chunks |
-| `hi_global` | Global knowledge | Community reports + Chunks |
-| `hi_bridge` | Bridge knowledge | Cross-community reasoning paths |
+| `local` | Local knowledge | Entities + Relations + Chunks |
+| `global` | Global knowledge | Community reports + Chunks |
+| `bridge` | Bridge knowledge | Cross-community reasoning paths |
+| `nobridge` | No-bridge | Local + Global (no paths) |
 | `hi` | Full hierarchical | All components combined |
 
 ## Advanced Usage
