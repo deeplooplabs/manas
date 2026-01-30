@@ -54,6 +54,7 @@ class QueryResponse(BaseModel):
 class DocumentInput(BaseModel):
     """Document input for indexing."""
 
+    id: str | None = Field(default=None, description="Optional document ID")
     content: str = Field(
         ...,
         min_length=1,

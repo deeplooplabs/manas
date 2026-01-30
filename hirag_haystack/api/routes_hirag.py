@@ -112,7 +112,7 @@ async def index_documents(
     documents = []
     for doc in request.documents:
         meta = doc.meta or {}
-        documents.append(Document(content=doc.content, meta=meta))
+        documents.append(Document(id=doc.id, content=doc.content, meta=meta))
 
     # Use project_id if provided, else default
     pid = project_id or "default"
@@ -162,11 +162,15 @@ async def get_graph_stats(
         graph_store = hirag._get_project(pid)[2]
 
         # Entity count
-        entities = graph_store.get_all_entities() if hasattr(graph_store, "get_all_entities") else []
+        entities = (
+            graph_store.get_all_entities() if hasattr(graph_store, "get_all_entities") else []
+        )
         entities_count = len(entities)
 
         # Relation count
-        relations = graph_store.get_all_relations() if hasattr(graph_store, "get_all_relations") else []
+        relations = (
+            graph_store.get_all_relations() if hasattr(graph_store, "get_all_relations") else []
+        )
         relations_count = len(relations)
 
         # Community count
@@ -291,9 +295,7 @@ async def delete_document(
     pid = project_id or "default"
 
     try:
-        result = await run_index_with_lock(
-            lambda: hirag.delete(doc_ids=doc_id, project_id=pid)
-        )
+        result = await run_index_with_lock(lambda: hirag.delete(doc_ids=doc_id, project_id=pid))
         return {
             "status": "deleted",
             "doc_id": doc_id,

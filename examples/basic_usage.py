@@ -14,6 +14,8 @@ from haystack.components.generators import OpenAIGenerator
 from haystack.utils.auth import Secret
 from haystack.components.embedders import OpenAITextEmbedder
 
+from haystack.dataclasses import Document
+
 from hirag_haystack import HiRAG, QueryParam
 from hirag_haystack.stores import EntityVectorStore, ChunkVectorStore
 
@@ -96,7 +98,7 @@ def main():
     """
 
     print("Indexing documents...")
-    result = hirag.index(documents)
+    result = hirag.index([Document(content=documents)])
     print(f"Indexed: {result}")
 
     # Query examples with different modes

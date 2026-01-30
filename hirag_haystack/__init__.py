@@ -103,7 +103,7 @@ class HiRAG:
         print(result["answer"])
 
         # Multi-project usage
-        hirag.index(["AI content"], doc_ids=["d1"], project_id="proj_a")
+        hirag.index([Document(id="d1", content="AI content")], project_id="proj_a")
         hirag.query("What is AI?", project_id="proj_a")
         ```
     """
@@ -156,15 +156,11 @@ class HiRAG:
         self.graph_store = default[2]
 
         # Initialize visualizer
-        self.visualizer = GraphVisualizer(
-            output_dir=str(Path(working_dir) / "visualizations")
-        )
+        self.visualizer = GraphVisualizer(output_dir=str(Path(working_dir) / "visualizations"))
 
     # ===== Project Pipeline Management =====
 
-    def _create_project_pipelines(
-        self, project_id: str
-    ) -> tuple:
+    def _create_project_pipelines(self, project_id: str) -> tuple:
         """Create isolated stores and pipelines for a project.
 
         Args:
@@ -184,15 +180,14 @@ class HiRAG:
             )
         else:
             from hirag_haystack.stores.neo4j_store import Neo4jGraphStore
+
             graph_store = Neo4jGraphStore(
                 namespace=namespace,
                 working_dir=project_dir,
             )
 
         # Components
-        entity_extractor = (
-            EntityExtractor(generator=self.generator) if self.generator else None
-        )
+        entity_extractor = EntityExtractor(generator=self.generator) if self.generator else None
         community_detector = CommunityDetector()
         report_generator = (
             CommunityReportGenerator(generator=self.generator) if self.generator else None
@@ -240,8 +235,7 @@ class HiRAG:
 
     def index(
         self,
-        documents: list[str] | str | list[Document],
-        doc_ids: list[str] | None = None,
+        documents: list[Document],
         project_id: str = "default",
         incremental: bool = False,
         force_reindex: bool = False,
@@ -249,12 +243,9 @@ class HiRAG:
         """Index documents into the HiRAG system.
 
         Args:
-            documents: Documents to index. Can be:
-                - A string (treated as single document content)
-                - A list of strings (each treated as document content)
-                - A list of Haystack Document objects
-            doc_ids: Optional list of external document IDs. Must match
-                the number of documents. Enables delete/update by doc_id.
+            documents: List of Haystack Document objects to index.
+                Use ``Document(id=..., content=...)`` to assign document IDs
+                for later delete/update operations.
             project_id: Project identifier for data isolation (default: "default").
             incremental: If True, only index new documents (incremental update).
             force_reindex: If True, reindex all documents (ignores existing).
@@ -264,10 +255,8 @@ class HiRAG:
         """
         indexing_pipeline = self._get_project(project_id)[0]
         if incremental:
-            return indexing_pipeline.index_incremental(
-                documents, force_reindex=force_reindex, doc_ids=doc_ids
-            )
-        return indexing_pipeline.index(documents, doc_ids=doc_ids)
+            return indexing_pipeline.index_incremental(documents, force_reindex=force_reindex)
+        return indexing_pipeline.index(documents)
 
     def query(
         self,
@@ -454,9 +443,7 @@ class HiRAG:
             ```
         """
         graph_store = self._get_project(project_id)[2]
-        communities = (
-            graph_store._communities if hasattr(graph_store, "_communities") else {}
-        )
+        communities = graph_store._communities if hasattr(graph_store, "_communities") else {}
 
         # Detect communities if not already done
         if not communities:
@@ -464,26 +451,24 @@ class HiRAG:
             communities = graph_store._communities
 
         if kind == "graph":
-            return {"graph": self.visualizer.visualize_knowledge_graph(
-                graph_store=graph_store,
-                **kwargs
-            )}
+            return {
+                "graph": self.visualizer.visualize_knowledge_graph(
+                    graph_store=graph_store, **kwargs
+                )
+            }
         elif kind == "communities":
-            return {"communities": self.visualizer.visualize_communities(
-                communities=communities,
-                graph_store=graph_store,
-                **kwargs
-            )}
+            return {
+                "communities": self.visualizer.visualize_communities(
+                    communities=communities, graph_store=graph_store, **kwargs
+                )
+            }
         elif kind == "stats":
-            return {"stats": self.visualizer.visualize_entity_stats(
-                graph_store=graph_store,
-                **kwargs
-            )}
+            return {
+                "stats": self.visualizer.visualize_entity_stats(graph_store=graph_store, **kwargs)
+            }
         elif kind == "all":
             return self.visualizer.visualize_all(
-                graph_store=graph_store,
-                communities=communities,
-                **kwargs
+                graph_store=graph_store, communities=communities, **kwargs
             )
         else:
             raise ValueError(

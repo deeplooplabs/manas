@@ -6,6 +6,8 @@ This demonstrates the full workflow without requiring a real OpenAI API key.
 import os
 from dotenv import load_dotenv
 
+from haystack.dataclasses import Document
+
 from hirag_haystack import HiRAG, QueryParam
 from hirag_haystack.stores import EntityVectorStore, ChunkVectorStore
 from hirag_haystack.components.entity_extractor import EntityExtractor
@@ -137,7 +139,7 @@ def main():
     print(f"\n📚 Indexing documents...")
     print(f"   Document size: {len(documents)} characters")
 
-    result = hirag.index(documents)
+    result = hirag.index([Document(content=documents)])
 
     print(f"\n✅ Indexing completed:")
     print(f"   - Documents: {result.get('documents_count', 0)}")
