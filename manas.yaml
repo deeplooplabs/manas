@@ -2,7 +2,7 @@
 # Copy this to manas.yaml or ~/.manas.yaml
 
 # Working directory for cache and data
-working_dir: ./manas_cache
+working_dir: ./manas_data
 
 # LLM model (see https://platform.openai.com/docs/models)
 model: gpt-4o-mini
