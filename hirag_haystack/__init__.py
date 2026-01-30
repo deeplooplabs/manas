@@ -20,6 +20,7 @@ from hirag_haystack.stores import (
     EntityVectorStore,
     ChunkVectorStore,
     KVStore,
+    DocIdIndex,
 )
 from hirag_haystack.pipelines import HiRAGIndexingPipeline, HiRAGQueryPipeline
 from hirag_haystack.components import (
@@ -53,6 +54,7 @@ __all__ = [
     "EntityVectorStore",
     "ChunkVectorStore",
     "KVStore",
+    "DocIdIndex",
     # Components
     "EntityExtractor",
     "CommunityDetector",
@@ -183,6 +185,7 @@ class HiRAG:
     def index(
         self,
         documents: list[str] | str | list[Document],
+        doc_ids: list[str] | None = None,
         incremental: bool = False,
         force_reindex: bool = False,
     ) -> dict:
@@ -193,6 +196,8 @@ class HiRAG:
                 - A string (treated as single document content)
                 - A list of strings (each treated as document content)
                 - A list of Haystack Document objects
+            doc_ids: Optional list of external document IDs. Must match
+                the number of documents. Enables delete/update by doc_id.
             incremental: If True, only index new documents (incremental update).
             force_reindex: If True, reindex all documents (ignores existing).
 
@@ -200,8 +205,10 @@ class HiRAG:
             Dictionary with indexing statistics.
         """
         if incremental:
-            return self.indexing_pipeline.index_incremental(documents, force_reindex=force_reindex)
-        return self.indexing_pipeline.index(documents)
+            return self.indexing_pipeline.index_incremental(
+                documents, force_reindex=force_reindex, doc_ids=doc_ids
+            )
+        return self.indexing_pipeline.index(documents, doc_ids=doc_ids)
 
     def query(
         self,
@@ -264,6 +271,55 @@ class HiRAG:
             Dictionary with answer and context.
         """
         return self.query(query, mode="hi_nobridge", param=param)
+
+    # ===== Document Management =====
+
+    def delete(self, doc_ids: str | list[str]) -> dict:
+        """Delete one or more documents by their external doc_ids.
+
+        Removes all associated data: chunks, graph references,
+        orphaned entities, and regenerates communities.
+
+        Args:
+            doc_ids: A single doc_id string or a list of doc_id strings.
+
+        Returns:
+            Dictionary with deletion statistics.
+        """
+        if isinstance(doc_ids, str):
+            return self.indexing_pipeline.delete_document(doc_ids)
+        return self.indexing_pipeline.delete_documents(doc_ids)
+
+    def update(self, doc_id: str, content: str) -> dict:
+        """Update a document by deleting and re-indexing it.
+
+        Args:
+            doc_id: The external document ID.
+            content: New content for the document.
+
+        Returns:
+            Dictionary with update statistics.
+        """
+        return self.indexing_pipeline.update_document(doc_id, content)
+
+    def list_documents(self) -> list[str]:
+        """List all registered external document IDs.
+
+        Returns:
+            Sorted list of doc_id strings.
+        """
+        return self.indexing_pipeline.list_documents()
+
+    def has_document(self, doc_id: str) -> bool:
+        """Check if a document ID is registered.
+
+        Args:
+            doc_id: The external document ID.
+
+        Returns:
+            True if the doc_id exists, False otherwise.
+        """
+        return self.indexing_pipeline.has_document(doc_id)
 
     @property
     def communities(self) -> dict:

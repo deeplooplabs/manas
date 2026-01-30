@@ -399,6 +399,99 @@ class ChunkVectorStore:
         """
         return self.get_by_id(chunk_id)
 
+    def get_chunks_by_doc_id(self, doc_id: str) -> List[dict]:
+        """Get all chunks belonging to a document by its full_doc_id metadata.
+
+        Args:
+            doc_id: The source document ID (stored as full_doc_id in chunk metadata).
+
+        Returns:
+            List of chunk data dicts.
+        """
+        results = []
+        for chunk_id, chunk_data in self._chunk_index.items():
+            if chunk_data.get("full_doc_id") == doc_id:
+                results.append({"id": chunk_id, **chunk_data})
+        return results
+
+
+class DocIdIndex:
+    """Reverse index mapping external doc_ids to their chunks and entities.
+
+    Tracks which chunks and entities belong to each document,
+    enabling efficient deletion and update operations.
+    """
+
+    def __init__(self, working_dir: str = "./hirag_cache"):
+        self.working_dir = working_dir
+        # doc_id -> list of chunk_ids
+        self._doc_chunks: dict[str, list[str]] = {}
+        # doc_id -> set of entity_names (stored as list for JSON serialization)
+        self._doc_entities: dict[str, list[str]] = {}
+
+        self._load_from_disk()
+
+    def add_chunks(self, doc_id: str, chunk_ids: list[str]) -> None:
+        """Register chunk_ids for a doc_id."""
+        existing = self._doc_chunks.get(doc_id, [])
+        merged = list(dict.fromkeys(existing + chunk_ids))  # deduplicate, preserve order
+        self._doc_chunks[doc_id] = merged
+
+    def add_entities(self, doc_id: str, entity_names: list[str]) -> None:
+        """Register entity_names for a doc_id."""
+        existing = set(self._doc_entities.get(doc_id, []))
+        existing.update(entity_names)
+        self._doc_entities[doc_id] = sorted(existing)
+
+    def get_chunks(self, doc_id: str) -> list[str]:
+        """Return chunk_ids belonging to doc_id."""
+        return list(self._doc_chunks.get(doc_id, []))
+
+    def get_entities(self, doc_id: str) -> list[str]:
+        """Return entity_names belonging to doc_id."""
+        return list(self._doc_entities.get(doc_id, []))
+
+    def list_doc_ids(self) -> list[str]:
+        """Return all registered doc_ids."""
+        return sorted(self._doc_chunks.keys())
+
+    def has_doc(self, doc_id: str) -> bool:
+        """Check if a doc_id is registered."""
+        return doc_id in self._doc_chunks
+
+    def remove_doc(self, doc_id: str) -> None:
+        """Remove all records for a doc_id."""
+        self._doc_chunks.pop(doc_id, None)
+        self._doc_entities.pop(doc_id, None)
+
+    def all_entity_doc_ids(self, entity_name: str) -> list[str]:
+        """Return all doc_ids that reference a given entity_name."""
+        return [
+            did for did, enames in self._doc_entities.items()
+            if entity_name in enames
+        ]
+
+    def _load_from_disk(self) -> None:
+        index_path = Path(self.working_dir) / "doc_id_index.json"
+        if index_path.exists():
+            try:
+                with open(index_path, "r") as f:
+                    data = json.load(f)
+                self._doc_chunks = data.get("doc_chunks", {})
+                self._doc_entities = data.get("doc_entities", {})
+            except (json.JSONDecodeError, IOError):
+                self._doc_chunks = {}
+                self._doc_entities = {}
+
+    def save_to_disk(self) -> None:
+        Path(self.working_dir).mkdir(parents=True, exist_ok=True)
+        index_path = Path(self.working_dir) / "doc_id_index.json"
+        with open(index_path, "w") as f:
+            json.dump(
+                {"doc_chunks": self._doc_chunks, "doc_entities": self._doc_entities},
+                f,
+            )
+
 
 class KVStore:
     """Key-value store for structured data.

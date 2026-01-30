@@ -1,7 +1,7 @@
 # flake8: noqa
 from .base import GraphDocumentStore
 from .networkx_store import NetworkXGraphStore
-from .vector_store import EntityVectorStore, ChunkVectorStore, KVStore
+from .vector_store import EntityVectorStore, ChunkVectorStore, KVStore, DocIdIndex
 
 # Neo4j is optional
 try:
@@ -17,6 +17,7 @@ __all__ = [
     "EntityVectorStore",
     "ChunkVectorStore",
     "KVStore",
+    "DocIdIndex",
 ]
 
 if _neo4j_available:
