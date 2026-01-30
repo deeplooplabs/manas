@@ -104,9 +104,9 @@ def main():
     # Query examples with different modes
     queries = [
         ("What is the relationship between AI and Machine Learning?", "hi"),
-        ("What are the main areas of AI?", "hi_global"),
-        ("How do LLMs relate to NLP?", "hi_bridge"),
-        ("Explain knowledge graphs and their applications.", "hi_local"),
+        ("What are the main areas of AI?", "global"),
+        ("How do LLMs relate to NLP?", "bridge"),
+        ("Explain knowledge graphs and their applications.", "local"),
     ]
 
     print("\n" + "=" * 60)

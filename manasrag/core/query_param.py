@@ -9,11 +9,11 @@ class RetrievalMode(str, Enum):
     """Supported retrieval modes."""
 
     NAIVE = "naive"  # Basic RAG with document chunks
-    HI_LOCAL = "hi_local"  # Local knowledge: entities + relations + chunks
-    HI_GLOBAL = "hi_global"  # Global knowledge: community reports + chunks
-    HI_BRIDGE = "hi_bridge"  # Bridge knowledge: cross-community paths
+    LOCAL = "local"  # Local knowledge: entities + relations + chunks
+    GLOBAL = "global"  # Global knowledge: community reports + chunks
+    BRIDGE = "bridge"  # Bridge knowledge: cross-community paths
     HI = "hi"  # Full hierarchical: all of the above
-    HI_NOBRIDGE = "hi_nobridge"  # Hierarchical without bridge paths
+    NOBRIDGE = "nobridge"  # Hierarchical without bridge paths
 
 
 @dataclass
@@ -35,7 +35,7 @@ class QueryParam:
         community_single_one: If True, only use top community.
     """
 
-    mode: Literal["hi", "hi_local", "hi_global", "hi_bridge", "hi_nobridge", "naive"] = "hi"
+    mode: Literal["hi", "local", "global", "bridge", "nobridge", "naive"] = "hi"
     only_need_context: bool = False
     response_type: str = "Multiple Paragraphs"
     level: int = 2
@@ -57,19 +57,19 @@ class QueryParam:
         return cls(mode="naive", **kwargs)
 
     @classmethod
-    def hi_local(cls, **kwargs) -> "QueryParam":
+    def local(cls, **kwargs) -> "QueryParam":
         """Create params for local knowledge mode."""
-        return cls(mode="hi_local", **kwargs)
+        return cls(mode="local", **kwargs)
 
     @classmethod
-    def hi_global(cls, **kwargs) -> "QueryParam":
+    def global_mode(cls, **kwargs) -> "QueryParam":
         """Create params for global knowledge mode."""
-        return cls(mode="hi_global", **kwargs)
+        return cls(mode="global", **kwargs)
 
     @classmethod
-    def hi_bridge(cls, **kwargs) -> "QueryParam":
+    def bridge(cls, **kwargs) -> "QueryParam":
         """Create params for bridge knowledge mode."""
-        return cls(mode="hi_bridge", **kwargs)
+        return cls(mode="bridge", **kwargs)
 
     @classmethod
     def hi(cls, **kwargs) -> "QueryParam":

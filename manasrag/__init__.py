@@ -315,8 +315,8 @@ class ManasRAG:
 
         Args:
             query: User query string.
-            mode: Retrieval mode ("naive", "hi_local", "hi_global", "hi_bridge",
-                  "hi_nobridge", "hi").
+            mode: Retrieval mode ("naive", "local", "global", "bridge",
+                  "nobridge", "hi").
             param: Optional QueryParam for detailed configuration.
             project_id: Project identifier for data isolation (default: "default").
 
@@ -343,7 +343,7 @@ class ManasRAG:
         Returns:
             Dictionary with answer and context.
         """
-        return self.query(query, mode="hi_local", param=param, project_id=project_id)
+        return self.query(query, mode="local", param=param, project_id=project_id)
 
     def query_global(
         self, query: str, param: QueryParam | None = None, project_id: str = "default"
@@ -358,7 +358,7 @@ class ManasRAG:
         Returns:
             Dictionary with answer and context.
         """
-        return self.query(query, mode="hi_global", param=param, project_id=project_id)
+        return self.query(query, mode="global", param=param, project_id=project_id)
 
     def query_nobridge(
         self, query: str, param: QueryParam | None = None, project_id: str = "default"
@@ -377,7 +377,7 @@ class ManasRAG:
         Returns:
             Dictionary with answer and context.
         """
-        return self.query(query, mode="hi_nobridge", param=param, project_id=project_id)
+        return self.query(query, mode="nobridge", param=param, project_id=project_id)
 
     # ===== Document Management =====
 

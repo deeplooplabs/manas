@@ -143,7 +143,7 @@ class HierarchicalRetriever:
             retrieved_entities: List of entities retrieved from vector store.
             communities: Dictionary of communities.
             community_reports: Dictionary of community report strings.
-            mode: Retrieval mode (naive, hi_local, hi_global, hi_bridge, hi).
+            mode: Retrieval mode (naive, local, global, bridge, hi).
             param: QueryParam with detailed configuration.
 
         Returns:
@@ -158,17 +158,17 @@ class HierarchicalRetriever:
             context = self._naive_retrieve(query, param)
             self._logger.debug(f"Naive context length={len(context)}")
             return {"context": context}
-        elif mode == "hi_local":
+        elif mode == "local":
             context = self._local_retrieve(query, retrieved_entities, param)
             self._logger.debug(f"Local context length={len(context)}")
             return {"context": context}
-        elif mode == "hi_global":
+        elif mode == "global":
             context = self._global_retrieve(
                 query, retrieved_entities, communities, community_reports, param
             )
             self._logger.debug(f"Global context length={len(context)}")
             return {"context": context}
-        elif mode == "hi_bridge":
+        elif mode == "bridge":
             context = self._bridge_retrieve(
                 query, retrieved_entities, communities, param
             )
@@ -180,7 +180,7 @@ class HierarchicalRetriever:
             )
             self._logger.debug(f"Hierarchical context length={len(context)}")
             return {"context": context}
-        elif mode == "hi_nobridge":
+        elif mode == "nobridge":
             context = self._nobridge_retrieve(
                 query, retrieved_entities, communities, community_reports, param
             )
@@ -608,19 +608,19 @@ class ContextBuilder:
 
         if mode == "naive":
             sections.append(text_units_context)
-        elif mode == "hi_local":
+        elif mode == "local":
             if entities_context:
                 sections.append(f"-----Entities-----\n{entities_context}")
             if relations_context:
                 sections.append(f"-----Relations-----\n{relations_context}")
             if text_units_context:
                 sections.append(f"-----Sources-----\n{text_units_context}")
-        elif mode == "hi_global":
+        elif mode == "global":
             if communities_context:
                 sections.append(f"-----Backgrounds-----\n{communities_context}")
             if text_units_context:
                 sections.append(f"-----Sources-----\n{text_units_context}")
-        elif mode == "hi_bridge":
+        elif mode == "bridge":
             if reasoning_path_context:
                 sections.append(f"-----Reasoning Path-----\n{reasoning_path_context}")
             if text_units_context:

@@ -1,4 +1,4 @@
-"""Logging configuration for HiRAG-Haystack.
+"""Logging configuration for ManasRAG.
 
 Provides a TRACE level (5) below DEBUG (10) for detailed execution tracing.
 """
@@ -22,7 +22,7 @@ LOG_LEVELS = {
 
 
 def _setup_component_loggers(level: str | int) -> None:
-    """Configure loggers for HiRAG components.
+    """Configure loggers for ManasRAG components.
 
     Args:
         level: Logging level as string or int
@@ -34,8 +34,8 @@ def _setup_component_loggers(level: str | int) -> None:
             raise ValueError(f"Invalid log level: {level}. Valid: {list(LOG_LEVELS.keys())}")
         level = LOG_LEVELS[level_upper]
 
-    # Configure the root hirag_haystack logger
-    root_logger = logging.getLogger("hirag_haystack")
+    # Configure the root manasrag logger
+    root_logger = logging.getLogger("manasrag")
     root_logger.setLevel(level)
 
     # Remove existing handlers to avoid duplicates
@@ -59,7 +59,7 @@ def setup_logging(
     level: str = "INFO",
     format: Optional[str] = None,
 ) -> None:
-    """Configure global logging for the hirag_haystack package.
+    """Configure global logging for the manasrag package.
 
     Args:
         level: Logging level (TRACE, DEBUG, INFO, WARNING, ERROR, CRITICAL)
@@ -69,15 +69,15 @@ def setup_logging(
 
 
 def get_logger(name: str) -> logging.Logger:
-    """Get a logger with the given name under the hirag_haystack namespace.
+    """Get a logger with the given name under the manasrag namespace.
 
     Args:
-        name: Logger name (will be prefixed with 'hirag_haystack.')
+        name: Logger name (will be prefixed with 'manasrag.')
 
     Returns:
         Configured logger instance
     """
-    return logging.getLogger(f"hirag_haystack.{name}")
+    return logging.getLogger(f"manasrag.{name}")
 
 
 def get_tracer() -> logging.Logger:
@@ -86,7 +86,7 @@ def get_tracer() -> logging.Logger:
     Returns:
         Logger configured for trace output
     """
-    return logging.getLogger("hirag_haystack.trace")
+    return logging.getLogger("manasrag.trace")
 
 
 # Add TRACE level to logging module if not already present

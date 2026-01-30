@@ -408,7 +408,7 @@ def add_documents(
 @click.argument("query", required=False)
 @click.option(
     "-m", "--mode",
-    type=click.Choice(["naive", "hi_local", "hi_global", "hi_bridge", "hi_nobridge", "hi"]),
+    type=click.Choice(["naive", "local", "global", "bridge", "nobridge", "hi"]),
     default=None,
     help="Retrieval mode (default: hi).",
 )

@@ -183,13 +183,13 @@ class VisualizeResponse(BaseModel):
 
 # Model-to-mode mapping
 MODEL_MODE_MAPPING: dict[str, str] = {
-    "hirag": "hi",
-    "hirag-hi": "hi",
-    "hirag-local": "hi_local",
-    "hirag-global": "hi_global",
-    "hirag-bridge": "hi_bridge",
-    "hirag-nobridge": "hi_nobridge",
-    "hirag-naive": "naive",
+    "manas": "hi",
+    "manas-hi": "hi",
+    "manas-local": "local",
+    "manas-global": "global",
+    "manas-bridge": "bridge",
+    "manas-nobridge": "nobridge",
+    "manas-naive": "naive",
 }
 
 # Available model names for /v1/models
@@ -202,7 +202,7 @@ class OpenAIModel(BaseModel):
     id: str
     object: Literal["model"] = "model"
     created: int = Field(default_factory=lambda: int(time.time()))
-    owned_by: str = "hirag"
+    owned_by: str = "manas"
 
 
 class OpenAIModelList(BaseModel):

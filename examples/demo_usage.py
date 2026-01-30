@@ -177,8 +177,8 @@ def main():
 
     test_queries = [
         ("What is AI?", "naive"),
-        ("Explain machine learning", "hi_local"),
-        ("How are neural networks related to AI?", "hi_global"),
+        ("Explain machine learning", "local"),
+        ("How are neural networks related to AI?", "global"),
     ]
 
     for query, mode in test_queries:

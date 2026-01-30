@@ -1,0 +1,45 @@
+# ManasRAG Configuration File
+# Copy this to manas.yaml or ~/.manas.yaml
+
+# Working directory for cache and data
+working_dir: ./manas_cache
+
+# LLM model (see https://platform.openai.com/docs/models)
+model: gpt-4o-mini
+
+# OpenAI API key (can also use OPENAI_API_KEY env var)
+# api_key: sk-...
+
+# Optional: Custom API endpoint base URL
+# base_url: https://api.openai.com/v1
+
+# Graph backend: networkx (in-memory) or neo4j (production)
+graph_backend: networkx
+
+# Indexing configuration
+index:
+  # Token chunk size for document splitting
+  chunk_size: 1200
+  # Overlap between chunks
+  chunk_overlap: 100
+  # Skip already-indexed documents
+  incremental: true
+
+# Query configuration
+query:
+  # Retrieval mode: naive, hi_local, hi_global, hi_bridge, hi_nobridge, hi
+  mode: hi
+  # Number of entities to retrieve
+  top_k: 20
+  # Key entities per community for path finding
+  top_m: 10
+  # Response format
+  response_type: Multiple Paragraphs
+
+# REST API server configuration
+server:
+  # Bind address
+  host: 0.0.0.0
+  # Bind port
+  port: 8000
+

@@ -1,6 +1,6 @@
 """SSE streaming utilities for OpenAI-compatible chat completions.
 
-Since HiRAG's query() is synchronous and returns a complete answer,
+Since ManasRAG's query() is synchronous and returns a complete answer,
 streaming is simulated by splitting the answer into word-level chunks
 and yielding them as Server-Sent Events (SSE).
 """
@@ -11,7 +11,7 @@ import time
 import uuid
 from collections.abc import AsyncGenerator
 
-from hirag_haystack.api.models import (
+from manasrag.api.models import (
     ChatCompletionChunk,
     ChatCompletionChunkChoice,
     ChatCompletionChunkDelta,

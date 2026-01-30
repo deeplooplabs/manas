@@ -37,10 +37,10 @@ async def list_models() -> OpenAIModelList:
 
     Each model maps to a ManasRAG retrieval mode:
     - manas / manas-hi: Full hierarchical (hi mode)
-    - manas-local: Entity-level only (hi_local mode)
-    - manas-global: Community reports only (hi_global mode)
-    - manas-bridge: Cross-community paths (hi_bridge mode)
-    - manas-nobridge: Local + global without paths (hi_nobridge mode)
+    - manas-local: Entity-level only (local mode)
+    - manas-global: Community reports only (global mode)
+    - manas-bridge: Cross-community paths (bridge mode)
+    - manas-nobridge: Local + global without paths (nobridge mode)
     - manas-naive: Simple chunk retrieval (naive mode)
     """
     models = [OpenAIModel(id=model_id) for model_id in AVAILABLE_MODELS]
@@ -59,10 +59,10 @@ async def chat_completions(
 
     The model field determines the retrieval mode:
     - manas, manas-hi -> hi (full hierarchical)
-    - manas-local -> hi_local
-    - manas-global -> hi_global
-    - manas-bridge -> hi_bridge
-    - manas-nobridge -> hi_nobridge
+    - manas-local -> local
+    - manas-global -> global
+    - manas-bridge -> bridge
+    - manas-nobridge -> nobridge
     - manas-naive -> naive
 
     Unknown model names default to 'hi' mode.

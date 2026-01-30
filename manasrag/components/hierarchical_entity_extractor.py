@@ -599,22 +599,22 @@ class HierarchicalEntityExtractor:
 
     def _get_entity_extraction_prompt(self) -> str:
         """Get entity extraction prompt."""
-        from hirag_haystack.prompts import HI_ENTITY_EXTRACTION_PROMPT
+        from manasrag.prompts import HI_ENTITY_EXTRACTION_PROMPT
         return HI_ENTITY_EXTRACTION_PROMPT
 
     def _get_relation_extraction_prompt(self) -> str:
         """Get relation extraction prompt."""
-        from hirag_haystack.prompts import HI_RELATION_EXTRACTION_PROMPT
+        from manasrag.prompts import HI_RELATION_EXTRACTION_PROMPT
         return HI_RELATION_EXTRACTION_PROMPT
 
     def _get_if_loop_prompt(self) -> str:
         """Get if-loop prompt."""
-        from hirag_haystack.prompts import ENTITY_IF_LOOP_EXTRACTION
+        from manasrag.prompts import ENTITY_IF_LOOP_EXTRACTION
         return ENTITY_IF_LOOP_EXTRACTION
 
     def _get_continue_prompt(self) -> str:
         """Get continue prompt."""
-        from hirag_haystack.prompts import ENTITY_CONTINUE_EXTRACTION
+        from manasrag.prompts import ENTITY_CONTINUE_EXTRACTION
         return ENTITY_CONTINUE_EXTRACTION
 
     def _generate_summary_entities(
@@ -653,7 +653,7 @@ class HierarchicalEntityExtractor:
         ])
 
         # Get meta concepts for this level
-        from hirag_haystack.prompts import (
+        from manasrag.prompts import (
             SUMMARY_ENTITY_EXTRACTION_PROMPT,
             META_SUMMARY_CONCEPTS,
             DEFAULT_TUPLE_DELIMITER,

@@ -127,7 +127,7 @@ def main():
 
     result = hirag.query(
         "How are machine learning and knowledge graphs connected?",
-        mode="hi_bridge",
+        mode="bridge",
     )
     print(f"Bridge Answer:\n{result['answer'][:500]}...")
 
@@ -138,7 +138,7 @@ def main():
 
     result = hirag.query(
         "What are the main themes across all documents?",
-        mode="hi_global",
+        mode="global",
     )
     print(f"Global Answer:\n{result['answer'][:500]}...")
 
@@ -147,7 +147,7 @@ def main():
     print("Example 5: Local entity and relationship focus")
     print("=" * 60)
 
-    param = QueryParam.hi_local(
+    param = QueryParam.local(
         top_k=15,
         max_token_for_local_context=10000,
     )

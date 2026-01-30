@@ -1,6 +1,6 @@
 # stores/AGENTS.md
 
-Graph storage backends for HiRAG knowledge graphs.
+Graph storage backends for ManasRAG knowledge graphs.
 
 ## Stores Overview
 
@@ -29,7 +29,7 @@ Loaded automatically on instantiation if files exist.
 
 ```python
 try:
-    from hirag_haystack.stores.neo4j_store import Neo4jGraphStore
+    from manasrag.stores.neo4j_store import Neo4jGraphStore
 except ImportError:
     # neo4j not installed
     pass

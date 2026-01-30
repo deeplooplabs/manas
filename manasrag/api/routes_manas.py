@@ -62,10 +62,10 @@ async def query(
 
     Supports multiple retrieval modes:
     - naive: Simple chunk-based retrieval
-    - hi_local: Entity-level retrieval only
-    - hi_global: Community report retrieval only
-    - hi_bridge: Cross-community path finding
-    - hi_nobridge: Local + global without paths
+    - local: Entity-level retrieval only
+    - global: Community report retrieval only
+    - bridge: Cross-community path finding
+    - nobridge: Local + global without paths
     - hi: Full hierarchical (local + global + bridge)
 
     Use project_id query parameter for multi-project isolation.
