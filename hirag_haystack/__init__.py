@@ -4,6 +4,11 @@ from typing import Any, NamedTuple
 
 from haystack.dataclasses import Document
 
+from hirag_haystack._logging import (
+    _setup_component_loggers,
+    get_logger,
+    LOG_LEVELS,
+)
 from hirag_haystack.core import (
     Entity,
     Relation,
@@ -129,6 +134,7 @@ class HiRAG:
         top_m: int = 10,
         chunk_size: int = 1200,
         chunk_overlap: int = 100,
+        log_level: str = "INFO",
     ):
         """Initialize HiRAG.
 
@@ -142,6 +148,7 @@ class HiRAG:
             top_m: Key entities per community for path finding.
             chunk_size: Chunk size for document splitting.
             chunk_overlap: Overlap between chunks.
+            log_level: Logging level (TRACE, DEBUG, INFO, WARNING, ERROR).
         """
         self.working_dir = working_dir
         self.graph_backend = graph_backend
@@ -152,6 +159,19 @@ class HiRAG:
         self.top_m = top_m
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
+        self.log_level = log_level
+
+        # Validate log level
+        if log_level.upper() not in LOG_LEVELS:
+            raise ValueError(
+                f"Invalid log_level: {log_level}. Valid: {list(LOG_LEVELS.keys())}"
+            )
+
+        # Configure logging
+        _setup_component_loggers(log_level)
+        self._logger = get_logger("HiRAG")
+
+        self._logger.info(f"HiRAG initialized (working_dir={working_dir}, log_level={log_level})")
 
         # Per-project pipeline cache: project_id -> ProjectPipelines
         self._project_pipelines: dict[str, ProjectPipelines] = {}
@@ -278,6 +298,7 @@ class HiRAG:
         Returns:
             Dictionary with indexing statistics.
         """
+        self._logger.info(f"Indexing {len(documents)} documents (project={project_id}, incremental={incremental})")
         indexing_pipeline = self._get_project(project_id).indexing_pipeline
         if incremental:
             return indexing_pipeline.index_incremental(documents, force_reindex=force_reindex)
@@ -305,6 +326,7 @@ class HiRAG:
                 - context: Retrieved context
                 - mode: Actual mode used
         """
+        self._logger.info(f"Query (project={project_id}, mode={mode}, query_len={len(query)})")
         query_pipeline = self._get_project(project_id).query_pipeline
         return query_pipeline.query(query, mode=mode, param=param)
 
@@ -372,6 +394,8 @@ class HiRAG:
         Returns:
             Dictionary with deletion statistics.
         """
+        doc_ids_list = [doc_ids] if isinstance(doc_ids, str) else doc_ids
+        self._logger.info(f"Deleting {len(doc_ids_list)} documents (project={project_id})")
         indexing_pipeline = self._get_project(project_id).indexing_pipeline
         if isinstance(doc_ids, str):
             return indexing_pipeline.delete_document(doc_ids)

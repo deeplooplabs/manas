@@ -10,35 +10,27 @@ This module implements the document indexing pipeline that:
 """
 
 import json
-from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from haystack import Pipeline, component
 from haystack.dataclasses import Document
 from haystack.components.preprocessors import DocumentSplitter
-from haystack.components.writers import DocumentWriter
 
+from hirag_haystack._logging import get_logger
 from hirag_haystack.components.entity_extractor import (
     EntityExtractor,
-    EntityExtractionResult,
-    merge_entities,
-    merge_relations,
 )
 from hirag_haystack.components.community_detector import CommunityDetector
 from hirag_haystack.components.report_generator import CommunityReportGenerator
-from hirag_haystack.core.graph import Entity, Relation
 from hirag_haystack.stores.base import GraphDocumentStore
 from hirag_haystack.stores.networkx_store import NetworkXGraphStore
 from hirag_haystack.stores.vector_store import (
-    EntityVectorStore,
-    ChunkVectorStore,
     KVStore,
     DocIdIndex,
 )
 from hirag_haystack.utils.token_utils import (
     compute_mdhash_id,
     count_tokens,
-    truncate_string_by_token_size,
 )
 
 
@@ -206,6 +198,9 @@ class HiRAGIndexingPipeline:
         self._communities: dict = {}
         self._reports: dict = {}
 
+        # Logger
+        self._logger = get_logger("indexing")
+
         # Load existing data
         self._load_state()
 
@@ -227,14 +222,18 @@ class HiRAGIndexingPipeline:
         if not docs:
             return {"status": "no_documents", "count": 0}
 
+        self._logger.info(f"Indexing {len(docs)} documents")
+
         # Step 1: Split documents into chunks
         chunks = self._split_documents(docs)
+        self._logger.debug(f"Split into {len(chunks)} chunks")
 
         # Step 2: Extract entities and relations
         if self.entity_extractor:
             extraction_result = self.entity_extractor.run(documents=chunks)
             entities = extraction_result.get("entities", [])
             relations = extraction_result.get("relations", [])
+            self._logger.debug(f"Extracted {len(entities)} entities, {len(relations)} relations")
         else:
             entities = []
             relations = []
@@ -242,10 +241,12 @@ class HiRAGIndexingPipeline:
         # Step 3: Index into graph store
         graph_indexer = GraphIndexer(self.graph_store)
         graph_indexer.run(entities=entities, relations=relations)
+        self._logger.debug(f"Indexed {len(entities)} nodes, {len(relations)} edges")
 
         # Step 4: Detect communities
         communities_result = self.community_detector.run(graph_store=self.graph_store)
         self._communities = communities_result.get("communities", {})
+        self._logger.debug(f"Detected {len(self._communities)} communities")
 
         # Step 5: Generate reports
         if self.report_generator and self._communities:
@@ -254,6 +255,7 @@ class HiRAGIndexingPipeline:
                 communities=self._communities,
             )
             self._reports = reports_result.get("reports", {})
+            self._logger.debug(f"Generated {len(self._reports)} community reports")
 
         # Step 6: Update vector stores
         if self.entity_vector_store and entities:
@@ -385,6 +387,8 @@ class HiRAGIndexingPipeline:
         if not docs:
             return {"status": "no_documents", "count": 0}
 
+        self._logger.info(f"Incremental indexing {len(docs)} documents (force_reindex={force_reindex})")
+
         # Compute hashes for deduplication
         new_docs = {}
         for doc in docs:
@@ -399,6 +403,7 @@ class HiRAGIndexingPipeline:
             new_docs[doc_hash] = {"content": content}
 
         if not new_docs:
+            self._logger.debug("All documents already indexed")
             return {"status": "all_existing", "new_count": 0, "count": len(docs)}
 
         # Split into chunks
@@ -410,7 +415,10 @@ class HiRAGIndexingPipeline:
         new_chunks = {k: v for k, v in chunks.items() if k in new_chunk_hashes}
 
         if not new_chunks:
+            self._logger.debug("All chunks already exist")
             return {"status": "all_existing", "new_count": len(new_docs), "chunks_count": 0}
+
+        self._logger.debug(f"Processing {len(new_chunks)} new chunks")
 
         # Extract entities and relations
         if self.entity_extractor:
@@ -420,6 +428,7 @@ class HiRAGIndexingPipeline:
             extraction_result = self.entity_extractor.run(documents=chunk_docs)
             entities = extraction_result.get("entities", [])
             relations = extraction_result.get("relations", [])
+            self._logger.debug(f"Extracted {len(entities)} entities, {len(relations)} relations")
         else:
             entities = []
             relations = []
@@ -427,11 +436,13 @@ class HiRAGIndexingPipeline:
         # Index into graph
         graph_indexer = GraphIndexer(self.graph_store)
         graph_indexer.run(entities=entities, relations=relations)
+        self._logger.debug(f"Indexed {len(entities)} nodes, {len(relations)} edges")
 
         # Update communities (drop and regenerate for simplicity)
         # TODO: Implement true incremental community update
         self.community_detector.run(graph_store=self.graph_store)
         self._communities = self.graph_store.community_schema()
+        self._logger.debug(f"Updated {len(self._communities)} communities")
 
         # Update reports
         if self.report_generator and self._communities:

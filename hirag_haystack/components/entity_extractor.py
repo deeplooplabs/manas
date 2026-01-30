@@ -4,15 +4,15 @@ This component uses LLMs to extract entities and relationships from text chunks,
 supporting the hierarchical extraction approach used in HiRAG.
 """
 
-import json
 import re
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 from haystack import component
 from haystack.dataclasses import Document
 
-from hirag_haystack.core.graph import Entity, Relation, NodeType
+from hirag_haystack._logging import get_logger, trace
+from hirag_haystack.core.graph import Entity, Relation
 
 
 # Default entity types to extract
@@ -73,6 +73,9 @@ class EntityExtractor:
         self.record_delimiter = record_delimiter
         self.completion_delimiter = completion_delimiter
 
+        # Logger
+        self._logger = get_logger("entity_extractor")
+
     @component.output_types(entities=list, relations=list)
     def run(
         self,
@@ -93,6 +96,8 @@ class EntityExtractor:
         if not documents:
             return {"entities": [], "relations": []}
 
+        self._logger.info(f"Extracting from {len(documents)} chunks")
+
         all_entities = []
         all_relations = []
 
@@ -110,6 +115,8 @@ class EntityExtractor:
                 content, chunk_id, entity_names, prompt_template
             )
             all_relations.extend(relations)
+
+        self._logger.debug(f"Extracted {len(all_entities)} entities, {len(all_relations)} relations")
 
         return {
             "entities": all_entities,
@@ -198,10 +205,13 @@ class EntityExtractor:
         if self.generator is None:
             raise ValueError("Generator not configured. Provide a ChatGenerator.")
 
+        self._logger.debug(f"Calling LLM (prompt_len={len(prompt)})")
         response = self.generator.run(prompt)
         # Extract text from response based on generator type
         if hasattr(response, "replies"):
-            return response.replies[0].text if response.replies else ""
+            result = response.replies[0].text if response.replies else ""
+            self._logger.debug(f"LLM response (len={len(result)})")
+            return result
         return str(response)
 
     def _parse_entities(self, text: str, chunk_id: str) -> list[Entity]:
@@ -320,6 +330,7 @@ class EntityExtractor:
         current_entities = initial_entities
 
         for i in range(self.max_gleaning):
+            trace(self._logger, f"Gleaning entities round {i+1}, current={len(current_entities)}")
             # Check if more entities should be extracted
             entity_names = [e.entity_name for e in current_entities]
             check_prompt = self._get_if_loop_prompt().format(
@@ -328,6 +339,7 @@ class EntityExtractor:
 
             result = self._call_llm(check_prompt)
             if "no" in result.lower().strip('"\' '):
+                trace(self._logger, "No more entities to extract")
                 break
 
             # Extract more entities
@@ -336,8 +348,10 @@ class EntityExtractor:
             new_entities = self._parse_entities(result, chunk_id)
 
             if not new_entities:
+                trace(self._logger, "No new entities found in gleaning")
                 break
 
+            trace(self._logger, f"Found {len(new_entities)} new entities")
             current_entities.extend(new_entities)
 
         return current_entities
@@ -353,12 +367,14 @@ class EntityExtractor:
         current_relations = initial_relations
 
         for i in range(self.max_gleaning):
+            trace(self._logger, f"Gleaning relations round {i+1}, current={len(current_relations)}")
             check_prompt = self._get_if_loop_prompt().format(
                 extracted_relations=str(len(current_relations))
             )
 
             result = self._call_llm(check_prompt)
             if "no" in result.lower().strip('"\' '):
+                trace(self._logger, "No more relations to extract")
                 break
 
             continue_prompt = self._get_continue_prompt()
@@ -366,8 +382,10 @@ class EntityExtractor:
             new_relations = self._parse_relations(result, chunk_id)
 
             if not new_relations:
+                trace(self._logger, "No new relations found in gleaning")
                 break
 
+            trace(self._logger, f"Found {len(new_relations)} new relations")
             current_relations.extend(new_relations)
 
         return current_relations
