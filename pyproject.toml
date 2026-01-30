@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "manas"
+name = "manasrag"
 version = "0.1.0"
 description = "Hierarchical Retrieval-Augmented Generation with Haystack"
 readme = "README.md"
@@ -65,16 +65,16 @@ api = [
     "uvicorn[standard]>=0.24.0",
 ]
 all = [
-    "manas[dev,neo4j,openai,scikit-learn,visualization,cli,api]",
+    "manasrag[dev,neo4j,openai,scikit-learn,visualization,cli,api]",
 ]
 
 [project.scripts]
 manas = "manasrag.cli:cli"
 
 [project.urls]
-Homepage = "https://github.com/yourusername/manas"
-Documentation = "https://github.com/yourusername/manas#readme"
-Source = "https://github.com/yourusername/manas"
+Homepage = "https://github.com/yourusername/manasrag"
+Documentation = "https://github.com/yourusername/manasrag#readme"
+Source = "https://github.com/yourusername/manasrag"
 
 [tool.hatch.build.targets.wheel]
 packages = ["manasrag"]
