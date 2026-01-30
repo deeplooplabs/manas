@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "manasrag"
-version = "0.1.0"
+version = "0.1.1"
 description = "Hierarchical Retrieval-Augmented Generation with Haystack"
 readme = "README.md"
 requires-python = ">=3.10"
