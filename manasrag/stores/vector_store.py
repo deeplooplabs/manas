@@ -23,7 +23,7 @@ class EntityVectorStore:
         self,
         embedding_func: Callable[[List[str]], List[List[float]]] | None = None,
         meta_fields: set | None = None,
-        working_dir: str = "./manas_cache",
+        working_dir: str = "./manas_data",
     ):
         """Initialize the entity vector store.
 

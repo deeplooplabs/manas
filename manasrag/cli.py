@@ -201,7 +201,7 @@ def _build_manasrag(
     "-d", "--working-dir",
     type=click.Path(),
     default=None,
-    help="Working directory for cache and data (default: ./manas_cache).",
+    help="Working directory for cache and data (default: ./manas_data).",
 )
 @click.option(
     "-c", "--config",
@@ -239,7 +239,7 @@ def cli(ctx: click.Context, working_dir: str | None, config: Path | None, verbos
     ctx.obj["working_dir"] = _resolve_value(
         working_dir,
         config_data.get("working_dir"),
-        default="./manas_cache",
+        default="./manas_data",
     )
     ctx.obj["verbose"] = verbose
     ctx.obj["timeout"] = _resolve_value(
@@ -813,7 +813,7 @@ def default_config(format: str) -> None:
         manas default-config --format env > .env.example
     """
     config = {
-        "working_dir": "./manas_cache",
+        "working_dir": "./manas_data",
         "model": "gpt-4o-mini",
         "api_key": "YOUR_API_KEY_HERE",
         "base_url": None,  # Optional, for custom endpoints
@@ -838,7 +838,7 @@ def default_config(format: str) -> None:
     env_vars = [
         ("OPENAI_API_KEY", "Your OpenAI API key"),
         ("OPENAI_BASE_URL", "Optional: Custom API endpoint base URL"),
-        ("MANAS_WORKING_DIR", "Working directory (default: ./manas_cache)"),
+        ("MANAS_WORKING_DIR", "Working directory (default: ./manas_data)"),
         ("MANAS_HOST", "Server bind host (default: 0.0.0.0)"),
         ("MANAS_PORT", "Server bind port (default: 8000)"),
     ]
@@ -861,7 +861,7 @@ def default_config(format: str) -> None:
 # Copy this to manas.yaml or ~/.manas.yaml
 
 # Working directory for cache and data
-working_dir: ./manas_cache
+working_dir: ./manas_data
 
 # LLM model (see https://platform.openai.com/docs/models)
 model: gpt-4o-mini

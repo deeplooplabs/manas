@@ -146,7 +146,7 @@ class ManasRAGIndexingPipeline:
         report_generator: CommunityReportGenerator | None = None,
         chunk_size: int = 1200,
         chunk_overlap: int = 100,
-        working_dir: str = "./manas_cache",
+        working_dir: str = "./manas_data",
         enable_incremental: bool = True,
     ):
         """Initialize the indexing pipeline.

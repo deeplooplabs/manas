@@ -17,7 +17,7 @@ class StorageConfig:
     """Configuration for storage backends."""
 
     namespace: str = "default"
-    working_dir: str = "./manas_cache"
+    working_dir: str = "./manas_data"
     global_config: dict = field(default_factory=dict)
 
 

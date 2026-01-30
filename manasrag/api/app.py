@@ -44,7 +44,7 @@ class AppConfig:
         max_workers: Number of thread pool workers.
     """
 
-    working_dir: str = "./manas_cache"
+    working_dir: str = "./manas_data"
     model: str | None = None
     api_key: str | None = None
     base_url: str | None = None
@@ -177,7 +177,7 @@ def _create_dev_app() -> FastAPI:
     This is used when running with --reload flag via uvicorn --factory.
     """
     config = AppConfig(
-        working_dir=os.environ.get("_MANAS_WORKING_DIR", "./manas_cache"),
+        working_dir=os.environ.get("_MANAS_WORKING_DIR", "./manas_data"),
         model=os.environ.get("_MANAS_MODEL") or None,
         api_key=os.environ.get("OPENAI_API_KEY"),
         base_url=os.environ.get("OPENAI_BASE_URL"),
