@@ -29,7 +29,7 @@ from hirag_haystack.components.report_generator import CommunityReportGenerator
 from hirag_haystack.core.graph import Entity, Relation
 from hirag_haystack.stores.base import GraphDocumentStore
 from hirag_haystack.stores.networkx_store import NetworkXGraphStore
-from hirag_haystack.stores.vector_store import EntityVectorStore, ChunkVectorStore, KVStore
+from hirag_haystack.stores.vector_store import EntityVectorStore, ChunkVectorStore, KVStore, DocIdIndex
 from hirag_haystack.utils.token_utils import (
     compute_mdhash_id,
     count_tokens,
@@ -194,6 +194,9 @@ class HiRAGIndexingPipeline:
         self.entity_vector_store = entity_store
         self.chunk_vector_store = chunk_store or document_store
 
+        # Doc ID index for document management
+        self.doc_id_index = DocIdIndex(working_dir=working_dir)
+
         # Communities storage
         self._communities: dict = {}
         self._reports: dict = {}
@@ -204,6 +207,7 @@ class HiRAGIndexingPipeline:
     def index(
         self,
         documents: list[Document] | list[str] | str,
+        doc_ids: list[str] | None = None,
     ) -> dict:
         """Index documents into the HiRAG system.
 
@@ -212,12 +216,14 @@ class HiRAGIndexingPipeline:
                 - List of Document objects
                 - List of strings (treated as document content)
                 - Single string (treated as single document content)
+            doc_ids: Optional list of external document IDs. Must match
+                the number of documents if provided.
 
         Returns:
             Dictionary with indexing statistics.
         """
         # Normalize input to Document objects
-        docs = self._normalize_documents(documents)
+        docs = self._normalize_documents(documents, doc_ids=doc_ids)
 
         if not docs:
             return {"status": "no_documents", "count": 0}
@@ -276,6 +282,33 @@ class HiRAGIndexingPipeline:
             self.chunk_vector_store.upsert(chunk_data)
             self.chunk_vector_store.save_to_disk()
 
+        # Update doc_id_index if doc_ids were provided
+        if doc_ids:
+            # Build mapping: doc.id -> doc_id
+            doc_id_map = {}
+            for doc, ext_id in zip(docs, doc_ids):
+                doc_id_map[doc.id or f"doc_{docs.index(doc)}"] = ext_id
+
+            # Track chunk_ids per doc_id
+            for chunk in chunks:
+                source_doc_id = chunk.meta.get("source_doc_id", "")
+                ext_id = doc_id_map.get(source_doc_id)
+                if ext_id:
+                    chunk_hash = compute_mdhash_id(chunk.content[:200], prefix="chunk-")
+                    self.doc_id_index.add_chunks(ext_id, [chunk_hash])
+
+            # Track entity_names per doc_id
+            for entity in entities:
+                # entity.source_id may contain chunk source references
+                for doc_internal_id, ext_id in doc_id_map.items():
+                    # Check if entity came from any chunk of this document
+                    doc_chunk_ids = self.doc_id_index.get_chunks(ext_id)
+                    entity_sources = set(entity.source_id.split("|")) if entity.source_id else set()
+                    if entity_sources & set(doc_chunk_ids):
+                        self.doc_id_index.add_entities(ext_id, [entity.entity_name])
+
+            self.doc_id_index.save_to_disk()
+
         # Save to disk
         self.graph_store.index_done_callback()
 
@@ -291,17 +324,33 @@ class HiRAGIndexingPipeline:
     def _normalize_documents(
         self,
         documents: list[Document] | list[str] | str,
+        doc_ids: list[str] | None = None,
     ) -> list[Document]:
-        """Normalize various input formats to Document objects."""
+        """Normalize various input formats to Document objects.
+
+        Args:
+            documents: Documents to normalize.
+            doc_ids: Optional external document IDs. If provided, must match
+                the number of documents.
+        """
         if isinstance(documents, str):
             documents = [documents]
 
+        if doc_ids is not None and len(doc_ids) != len(documents):
+            raise ValueError(
+                f"doc_ids length ({len(doc_ids)}) must match "
+                f"documents length ({len(documents)})"
+            )
+
         result = []
-        for doc in documents:
+        for idx, doc in enumerate(documents):
             if isinstance(doc, Document):
+                if doc_ids is not None:
+                    doc.id = doc_ids[idx]
                 result.append(doc)
             elif isinstance(doc, str):
-                result.append(Document(content=doc))
+                doc_id = doc_ids[idx] if doc_ids is not None else None
+                result.append(Document(id=doc_id, content=doc))
             else:
                 raise ValueError(f"Unsupported document type: {type(doc)}")
 
@@ -356,6 +405,7 @@ class HiRAGIndexingPipeline:
         self,
         documents: list[Document] | list[str] | str,
         force_reindex: bool = False,
+        doc_ids: list[str] | None = None,
     ) -> dict:
         """Index documents with incremental update support.
 
@@ -365,12 +415,13 @@ class HiRAGIndexingPipeline:
         Args:
             documents: Documents to index.
             force_reindex: If True, reindex all documents (ignores existing).
+            doc_ids: Optional list of external document IDs.
 
         Returns:
             Dictionary with indexing statistics.
         """
         # Normalize to Document objects
-        docs = self._normalize_documents(documents)
+        docs = self._normalize_documents(documents, doc_ids=doc_ids)
 
         if not docs:
             return {"status": "no_documents", "count": 0}
@@ -498,9 +549,16 @@ class HiRAGIndexingPipeline:
 
     def _save_state(self) -> None:
         """Save current state to disk."""
-        # Save communities
+        # Save communities (convert Community objects to dicts for serialization)
         comm_store = KVStore("communities", self.working_dir)
-        comm_store.set_batch(self._communities)
+        from hirag_haystack.core.community import Community
+        serializable_communities = {}
+        for k, v in self._communities.items():
+            if isinstance(v, Community):
+                serializable_communities[k] = dict(v.to_schema())
+            else:
+                serializable_communities[k] = v
+        comm_store.set_batch(serializable_communities)
         comm_store.save_to_disk()
 
         # Save reports
@@ -516,6 +574,137 @@ class HiRAGIndexingPipeline:
             self.entity_vector_store.save_to_disk()
         if self.chunk_vector_store:
             self.chunk_vector_store.save_to_disk()
+
+    # ===== Document Management =====
+
+    def delete_document(self, doc_id: str) -> dict:
+        """Delete a document and all associated data by its external doc_id.
+
+        Removes chunks, cleans graph references, removes orphaned entities,
+        regenerates communities, and persists changes.
+
+        Args:
+            doc_id: The external document ID.
+
+        Returns:
+            Dictionary with deletion statistics.
+        """
+        if not self.doc_id_index.has_doc(doc_id):
+            return {"status": "not_found", "doc_id": doc_id}
+
+        chunk_ids = self.doc_id_index.get_chunks(doc_id)
+        entity_names = self.doc_id_index.get_entities(doc_id)
+
+        # 1. Delete chunks from ChunkVectorStore
+        if self.chunk_vector_store and chunk_ids:
+            self.chunk_vector_store.delete_chunks(chunk_ids)
+
+        # 2. Delete chunks from text_chunks KVStore
+        for chunk_id in chunk_ids:
+            self.text_chunks_store.delete(chunk_id)
+
+        # 3. Clean graph: remove source references from edges
+        deleted_edges = 0
+        for src, tgt in self.graph_store.get_all_edges():
+            for chunk_id in chunk_ids:
+                removed = self.graph_store.remove_source_from_edge(src, tgt, chunk_id)
+                if removed:
+                    deleted_edges += 1
+
+        # 4. Clean graph: remove source references from nodes
+        deleted_nodes = []
+        for entity_name in entity_names:
+            if not self.graph_store.has_node(entity_name):
+                continue
+            for chunk_id in chunk_ids:
+                was_deleted = self.graph_store.remove_source_from_node(entity_name, chunk_id)
+                if was_deleted:
+                    deleted_nodes.append(entity_name)
+                    break  # Node already removed, skip remaining chunk_ids
+
+        # 5. Delete orphaned entities from EntityVectorStore
+        if self.entity_vector_store and deleted_nodes:
+            self.entity_vector_store.delete_entities(deleted_nodes)
+
+        # 6. Remove from doc_id_index
+        self.doc_id_index.remove_doc(doc_id)
+
+        # 7. Regenerate communities
+        if self.community_detector:
+            communities_result = self.community_detector.run(graph_store=self.graph_store)
+            self._communities = communities_result.get("communities", {})
+
+            if self.report_generator and self._communities:
+                reports_result = self.report_generator.run(
+                    graph_store=self.graph_store,
+                    communities=self._communities,
+                )
+                self._reports = reports_result.get("reports", {})
+
+        # 8. Save all stores
+        self._save_state()
+        self.doc_id_index.save_to_disk()
+        self.graph_store.save_to_disk()
+
+        return {
+            "status": "deleted",
+            "doc_id": doc_id,
+            "chunks_deleted": len(chunk_ids),
+            "entities_deleted": len(deleted_nodes),
+            "edges_deleted": deleted_edges,
+        }
+
+    def delete_documents(self, doc_ids: list[str]) -> dict:
+        """Delete multiple documents by their external doc_ids.
+
+        Args:
+            doc_ids: List of external document IDs to delete.
+
+        Returns:
+            Dictionary with aggregated deletion statistics.
+        """
+        results = []
+        for doc_id in doc_ids:
+            results.append(self.delete_document(doc_id))
+        return {
+            "status": "deleted",
+            "results": results,
+            "total_deleted": sum(1 for r in results if r["status"] == "deleted"),
+        }
+
+    def update_document(
+        self,
+        doc_id: str,
+        content: str,
+    ) -> dict:
+        """Update a document by deleting and re-indexing it.
+
+        Args:
+            doc_id: The external document ID.
+            content: New content for the document.
+
+        Returns:
+            Dictionary with update statistics.
+        """
+        delete_result = self.delete_document(doc_id)
+        index_result = self.index(
+            documents=[content],
+            doc_ids=[doc_id],
+        )
+        return {
+            "status": "updated",
+            "doc_id": doc_id,
+            "delete_result": delete_result,
+            "index_result": index_result,
+        }
+
+    def list_documents(self) -> list[str]:
+        """List all registered external document IDs."""
+        return self.doc_id_index.list_doc_ids()
+
+    def has_document(self, doc_id: str) -> bool:
+        """Check if a document ID is registered."""
+        return self.doc_id_index.has_doc(doc_id)
 
 
 def build_indexing_pipeline(
