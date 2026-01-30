@@ -21,7 +21,12 @@ class NetworkXGraphStore(GraphDocumentStore):
     """NetworkX-based graph store for HiRAG.
 
     Uses NetworkX for graph operations and python-louvain for
-    community detection (implements the Louvain method, similar to Leiden).
+    community detection (Louvain method).
+
+    Note: The original HiRAG paper uses Leiden algorithm for better
+    quality communities. This implementation uses Louvain (via python-louvain
+    package) as it's available without external dependencies. For Leiden
+    algorithm, use Neo4jGraphStore with Neo4j GDS library.
 
     Attributes:
         _graph: Internal NetworkX DiGraph storing entities and relations.
@@ -150,10 +155,14 @@ class NetworkXGraphStore(GraphDocumentStore):
 
     # ===== Community Operations =====
 
-    def clustering(self, algorithm: str = "leiden") -> dict[str, Community]:
+    def clustering(self, algorithm: str = "louvain") -> dict[str, Community]:
         """Perform community detection on the graph.
 
-        Uses the Louvain method (python-louvain) which is similar to Leiden.
+        Uses the Louvain method (python-louvain package).
+        The 'leiden' parameter is accepted for compatibility but uses Louvain internally.
+
+        Note: For true Leiden algorithm with better community quality,
+        use Neo4jGraphStore with Neo4j GDS library.
         """
         if self._graph.number_of_nodes() == 0:
             return {}

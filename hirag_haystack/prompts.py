@@ -35,6 +35,84 @@ META_ENTITY_TYPES = [
     "NUMBER",
 ]
 
+# ===== Meta Summary Entities Concept Sets (𝒳 from the paper) =====
+# These are high-level concepts used to guide summary entity generation
+META_SUMMARY_CONCEPTS = {
+    "GENERAL": [
+        "main topic", "central theme", "key concept", "primary focus",
+        "core idea", "fundamental principle", "essential element"
+    ],
+    "RELATIONAL": [
+        "relationship between", "connection to", "association with",
+        "dependency on", "interaction between", "influence on"
+    ],
+    "TEMPORAL": [
+        "time period", "chronological sequence", "historical context",
+        "development over time", "milestone", "phase"
+    ],
+    "CAUSAL": [
+        "cause of", "effect of", "reason for", "outcome of",
+        "consequence", "impact", "contributing factor"
+    ],
+    "COMPARATIVE": [
+        "similarity to", "difference from", "comparison with",
+        "advantage over", "distinction from", "versus"
+    ],
+}
+
+# ===== Summary Entity Generation Prompts =====
+
+SUMMARY_ENTITY_EXTRACTION_PROMPT = """You are an expert at generating summary entities (meta-level concepts) from a cluster of related entities.
+
+Given the following entities and their relationships from a knowledge graph cluster,
+generate summary entities that capture the high-level concepts and themes.
+
+Cluster Entities:
+{entities_info}
+
+Cluster Relationships:
+{relations_info}
+
+Meta Summary Concepts to consider:
+{meta_concepts}
+
+Output Format:
+- Start each record with ("summary_entity", ...
+- Use {tuple_delimiter} to separate fields within a record
+- Use {record_delimiter} to separate records
+- End with {completion_delimiter}
+
+Example:
+("summary_entity"{tuple_delimiter}"SUMMARY_NAME"{tuple_delimiter}"TYPE"{tuple_delimiter}"High-level description of this summary concept")
+
+Generate summary entities that represent the overarching themes of this cluster:
+
+Output:"""
+
+HIERARCHICAL_RELATION_EXTRACTION_PROMPT = """You are an expert at extracting hierarchical relations between summary entities and lower-level entities.
+
+Given a set of summary entities and their relationship to detailed entities,
+extract the hierarchical connections.
+
+Summary Entities:
+{summary_entities}
+
+Detailed Entities:
+{detailed_entities}
+
+Output Format:
+- Start each record with ("hierarchical_relation", ...
+- Use {tuple_delimiter} to separate fields
+- Use {record_delimiter} to separate records
+- End with {completion_delimiter}
+
+Example:
+("hierarchical_relation"{tuple_delimiter}"SUMMARY_ENTITY"{tuple_delimiter}"DETAILED_ENTITY"{tuple_delimiter}"Type of relationship"{tuple_delimiter}1.0)
+
+Relationship types: "generalizes", "specializes", "aggregates", "composes"
+
+Output:"""
+
 # ===== Entity Extraction Prompts =====
 
 ENTITY_EXTRACTION_PROMPT = """You are an expert at extracting entities from text.
@@ -313,6 +391,9 @@ def get_prompts() -> Dict[str, str]:
         "NAIVE_RAG_RESPONSE": NAIVE_RAG_RESPONSE,
         "LOCAL_RAG_RESPONSE": LOCAL_RAG_RESPONSE,
         "FAIL_RESPONSE": FAIL_RESPONSE,
+        # Hierarchical KG prompts
+        "SUMMARY_ENTITY_EXTRACTION_PROMPT": SUMMARY_ENTITY_EXTRACTION_PROMPT,
+        "HIERARCHICAL_RELATION_EXTRACTION_PROMPT": HIERARCHICAL_RELATION_EXTRACTION_PROMPT,
     }
 
 

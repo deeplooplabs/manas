@@ -613,3 +613,155 @@ class HierarchicalEntityExtractor:
         """Get continue prompt."""
         from hirag_haystack.prompts import ENTITY_CONTINUE_EXTRACTION
         return ENTITY_CONTINUE_EXTRACTION
+
+    def _generate_summary_entities(
+        self,
+        community_entities: list[Entity],
+        community_relations: list[Relation],
+        level: int = 1,
+    ) -> tuple[list[Entity], list[Relation]]:
+        """Generate summary entities for hierarchical knowledge graph.
+
+        This implements the meta-summary entity generation from the HiRAG paper,
+        where we create higher-level abstractions (𝒳 concept sets) to guide
+        cross-document reasoning.
+
+        Args:
+            community_entities: Entities in the community.
+            community_relations: Relations in the community.
+            level: Current hierarchy level.
+
+        Returns:
+            Tuple of (summary_entities, hierarchical_relations).
+        """
+        if not community_entities:
+            return [], []
+
+        # Prepare entity information for the prompt
+        entities_info = "\n".join([
+            f"- {e.entity_name} ({e.entity_type}): {e.description}"
+            for e in community_entities[:50]  # Limit for token constraints
+        ])
+
+        # Prepare relation information
+        relations_info = "\n".join([
+            f"- {r.src_id} -> {r.tgt_id}: {r.description}"
+            for r in community_relations[:50]
+        ])
+
+        # Get meta concepts for this level
+        from hirag_haystack.prompts import (
+            SUMMARY_ENTITY_EXTRACTION_PROMPT,
+            META_SUMMARY_CONCEPTS,
+            DEFAULT_TUPLE_DELIMITER,
+            DEFAULT_RECORD_DELIMITER,
+            DEFAULT_COMPLETION_DELIMITER,
+        )
+
+        meta_concepts = META_SUMMARY_CONCEPTS.get(
+            "GENERAL", []
+        ) + META_SUMMARY_CONCEPTS.get("RELATIONAL", [])
+
+        prompt = SUMMARY_ENTITY_EXTRACTION_PROMPT.format(
+            entities_info=entities_info,
+            relations_info=relations_info,
+            meta_concepts=", ".join(meta_concepts[:10]),
+            tuple_delimiter=DEFAULT_TUPLE_DELIMITER,
+            record_delimiter=DEFAULT_RECORD_DELIMITER,
+            completion_delimiter=DEFAULT_COMPLETION_DELIMITER,
+        )
+
+        try:
+            result = self._call_llm(prompt)
+            summary_entities = self._parse_summary_entities(result, level)
+        except Exception:
+            summary_entities = []
+
+        # Generate hierarchical relations (connecting summary to detailed entities)
+        hierarchical_relations = self._generate_hierarchical_relations(
+            summary_entities,
+            community_entities,
+            level,
+        )
+
+        return summary_entities, hierarchical_relations
+
+    def _parse_summary_entities(
+        self,
+        text: str,
+        level: int,
+    ) -> list[Entity]:
+        """Parse summary entities from LLM output."""
+        entities = []
+        records = split_string_by_multi_markers(
+            text,
+            [self.record_delimiter, self.completion_delimiter],
+        )
+
+        for record in records:
+            match = re.search(r"\((.*)\)", record)
+            if not match:
+                continue
+
+            fields = self._split_tuple(match.group(1))
+            if len(fields) < 3 or fields[0] != '"summary_entity"':
+                continue
+
+            entity_name = self._clean_str(fields[1]).upper()
+            if not entity_name:
+                continue
+
+            entity_type = self._clean_str(fields[2]).upper()
+            description = self._clean_str(fields[3]) if len(fields) > 3 else ""
+
+            # Add level prefix to avoid conflicts
+            prefixed_name = f"META_L{level}_{entity_name}"
+
+            entities.append(Entity(
+                entity_name=prefixed_name,
+                entity_type=f"SUMMARY_{entity_type}",
+                description=f"[Level {level}] {description}",
+                source_id=f"meta_level_{level}",
+            ))
+
+        return entities
+
+    def _generate_hierarchical_relations(
+        self,
+        summary_entities: list[Entity],
+        detailed_entities: list[Entity],
+        level: int,
+    ) -> list[Relation]:
+        """Generate hierarchical relations between summary and detailed entities.
+
+        Args:
+            summary_entities: Generated summary entities.
+            detailed_entities: Original detailed entities.
+            level: Current hierarchy level.
+
+        Returns:
+            List of hierarchical relations.
+        """
+        if not summary_entities or not detailed_entities:
+            return []
+
+        relations = []
+
+        # Create relations from each summary entity to relevant detailed entities
+        summary_names = [e.entity_name for e in summary_entities]
+        detailed_names = [e.entity_name for e in detailed_entities]
+
+        # Simple heuristic: connect summary to entities that appear in its description
+        for summary in summary_entities:
+            for detailed in detailed_entities:
+                # Check if detailed entity name appears in summary description
+                if detailed.entity_name in summary.description:
+                    relations.append(Relation(
+                        src_id=summary.entity_name,
+                        tgt_id=detailed.entity_name,
+                        weight=0.5,
+                        description=f"generalizes",
+                        source_id=f"meta_level_{level}",
+                    ))
+
+        return relations
