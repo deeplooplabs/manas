@@ -7,6 +7,9 @@ working_dir: ./manas_data
 # LLM model (see https://platform.openai.com/docs/models)
 model: gpt-4o-mini
 
+# LLM timeout in seconds (default: 600)
+timeout: 600
+
 # OpenAI API key (can also use OPENAI_API_KEY env var)
 # api_key: sk-...
 

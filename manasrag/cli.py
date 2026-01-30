@@ -115,6 +115,7 @@ def _build_manasrag(
     graph_backend: str,
     chunk_size: int,
     chunk_overlap: int,
+    timeout: int | None,
     top_k: int = 20,
     top_m: int = 10,
     verbose: bool = False,
@@ -129,6 +130,7 @@ def _build_manasrag(
         graph_backend: Graph backend ("networkx" or "neo4j").
         chunk_size: Token chunk size.
         chunk_overlap: Chunk overlap.
+        timeout: LLM timeout in seconds.
         top_k: Number of entities to retrieve.
         top_m: Key entities per community.
         verbose: Print progress information.
@@ -163,6 +165,8 @@ def _build_manasrag(
         generator_kwargs["model"] = model
     if base_url:
         generator_kwargs["api_base_url"] = base_url
+    if timeout:
+        generator_kwargs["timeout"] = timeout
 
     generator = OpenAIChatGenerator(**generator_kwargs)
 
@@ -210,9 +214,15 @@ def _build_manasrag(
     default=False,
     help="Enable verbose output.",
 )
+@click.option(
+    "--timeout",
+    type=int,
+    default=None,
+    help="LLM timeout in seconds (default: 600).",
+)
 @click.version_option(version=__version__, prog_name="manas")
 @click.pass_context
-def cli(ctx: click.Context, working_dir: str | None, config: Path | None, verbose: bool) -> None:
+def cli(ctx: click.Context, working_dir: str | None, config: Path | None, verbose: bool, timeout: int | None) -> None:
     """ManasRAG: Hierarchical Retrieval-Augmented Generation CLI.
 
     Index documents and query knowledge graphs using the ManasRAG system.
@@ -232,6 +242,12 @@ def cli(ctx: click.Context, working_dir: str | None, config: Path | None, verbos
         default="./manas_cache",
     )
     ctx.obj["verbose"] = verbose
+    ctx.obj["timeout"] = _resolve_value(
+        timeout,
+        config_data.get("timeout"),
+        env_var="MANAS_TIMEOUT",
+        default=600,
+    )
 
 
 @cli.command(name="add-documents")
@@ -289,6 +305,12 @@ def cli(ctx: click.Context, working_dir: str | None, config: Path | None, verbos
     default=None,
     help="Project ID for data isolation (default: default).",
 )
+@click.option(
+    "--timeout",
+    type=int,
+    default=None,
+    help="LLM timeout in seconds (default: 600).",
+)
 @click.pass_context
 def add_documents(
     ctx: click.Context,
@@ -302,6 +324,7 @@ def add_documents(
     base_url: str | None,
     graph_backend: str | None,
     project_id: str | None,
+    timeout: int | None,
 ) -> None:
     """Add documents to the knowledge graph.
 
@@ -331,6 +354,7 @@ def add_documents(
     base_url = _resolve_value(base_url, config.get("base_url"), env_var="OPENAI_BASE_URL")
     graph_backend = _resolve_value(graph_backend, config.get("graph_backend"), default="networkx")
     incremental = _resolve_value(incremental, index_config.get("incremental"), default=True)
+    timeout = _resolve_value(timeout, config.get("timeout"), env_var="MANAS_TIMEOUT", default=600)
 
     # Load documents
     loader = DocumentLoader(verbose=verbose)
@@ -363,6 +387,7 @@ def add_documents(
             graph_backend=graph_backend,
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap,
+            timeout=timeout,
             verbose=verbose,
         )
     except ManasRAGConfigError as e:
@@ -479,6 +504,12 @@ def add_documents(
     default=None,
     help="Project ID for data isolation (default: default).",
 )
+@click.option(
+    "--timeout",
+    type=int,
+    default=None,
+    help="LLM timeout in seconds (default: 600).",
+)
 @click.pass_context
 def query(
     ctx: click.Context,
@@ -495,6 +526,7 @@ def query(
     stdin: bool,
     output_json: bool,
     project_id: str | None,
+    timeout: int | None,
 ) -> None:
     """Query the knowledge graph.
 
@@ -539,6 +571,7 @@ def query(
     api_key = _resolve_value(api_key, config.get("api_key"), env_var="OPENAI_API_KEY")
     base_url = _resolve_value(base_url, config.get("base_url"), env_var="OPENAI_BASE_URL")
     graph_backend = _resolve_value(graph_backend, config.get("graph_backend"), default="networkx")
+    timeout = _resolve_value(timeout, config.get("timeout"), env_var="MANAS_TIMEOUT", default=600)
 
     # Build ManasRAG instance
     if verbose:
@@ -553,6 +586,7 @@ def query(
             graph_backend=graph_backend,
             chunk_size=1200,  # Not used for query
             chunk_overlap=100,
+            timeout=timeout,
             top_k=top_k,
             top_m=top_m,
             verbose=verbose,
