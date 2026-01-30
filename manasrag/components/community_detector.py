@@ -1,4 +1,4 @@
-"""Community detection component for HiRAG.
+"""Community detection component for ManasRAG.
 
 This component performs clustering on the knowledge graph to identify
 communities of related entities, forming a hierarchical structure.
@@ -12,9 +12,9 @@ Implements:
 
 from haystack import component
 
-from hirag_haystack._logging import get_logger
-from hirag_haystack.core.community import Community
-from hirag_haystack.stores.base import GraphDocumentStore
+from manasrag._logging import get_logger
+from manasrag.core.community import Community
+from manasrag.stores.base import GraphDocumentStore
 
 
 def calculate_cluster_sparsity(

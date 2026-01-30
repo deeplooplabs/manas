@@ -1,4 +1,4 @@
-"""Demo HiRAG functionality with mock generator.
+"""Demo ManasRAG functionality with mock generator.
 
 This demonstrates the full workflow without requiring a real OpenAI API key.
 """
@@ -8,10 +8,10 @@ from dotenv import load_dotenv
 
 from haystack.dataclasses import Document
 
-from hirag_haystack import HiRAG, QueryParam
-from hirag_haystack.stores import EntityVectorStore, ChunkVectorStore
-from hirag_haystack.components.entity_extractor import EntityExtractor
-from hirag_haystack.core.graph import Entity, Relation
+from manasrag import ManasRAG, QueryParam
+from manasrag.stores import EntityVectorStore, ChunkVectorStore
+from manasrag.components.entity_extractor import EntityExtractor
+from manasrag.core.graph import Entity, Relation
 
 
 class MockGenerator:
@@ -66,10 +66,10 @@ class MockReply:
 
 
 def main():
-    """Run HiRAG demo with mock generator."""
+    """Run ManasRAG demo with mock generator."""
 
     print("=" * 70)
-    print("HiRAG-Haystack Demo (Mock Mode)")
+    print("ManasRAG Demo (Mock Mode)")
     print("=" * 70)
 
     # Load environment variables
@@ -87,23 +87,23 @@ def main():
 
     # Set up stores
     print(f"\n📦 Initializing stores...")
-    chunk_store = ChunkVectorStore(working_dir="./hirag_demo_data")
-    entity_store = EntityVectorStore(working_dir="./hirag_demo_data")
+    chunk_store = ChunkVectorStore(working_dir="./manas_demo_data")
+    entity_store = EntityVectorStore(working_dir="./manas_demo_data")
 
     print(f"   ✓ ChunkVectorStore: {chunk_store.count} chunks")
     print(f"   ✓ EntityVectorStore: {entity_store.count} entities")
 
-    # Initialize HiRAG
-    print(f"\n🚀 Initializing HiRAG...")
-    hirag = HiRAG(
-        working_dir="./hirag_demo_data",
+    # Initialize ManasRAG
+    print(f"\n🚀 Initializing ManasRAG...")
+    manas = ManasRAG(
+        working_dir="./manas_demo_data",
         generator=generator,
         entity_store=entity_store,
         chunk_store=chunk_store,
         top_k=20,
         top_m=10,
     )
-    print(f"   ✓ HiRAG initialized")
+    print(f"   ✓ ManasRAG initialized")
 
     # Sample documents
     documents = """
@@ -139,7 +139,7 @@ def main():
     print(f"\n📚 Indexing documents...")
     print(f"   Document size: {len(documents)} characters")
 
-    result = hirag.index([Document(content=documents)])
+    result = manas.index([Document(content=documents)])
 
     print(f"\n✅ Indexing completed:")
     print(f"   - Documents: {result.get('documents_count', 0)}")
@@ -151,11 +151,11 @@ def main():
 
     # Check graph state
     print(f"\n📊 Graph state:")
-    print(f"   - Total entities in graph: {len(list(hirag.graph_store._graph.nodes()))}")
-    print(f"   - Total relations in graph: {len(list(hirag.graph_store._graph.edges()))}")
+    print(f"   - Total entities in graph: {len(list(manas.graph_store._graph.nodes()))}")
+    print(f"   - Total relations in graph: {len(list(manas.graph_store._graph.edges()))}")
 
     # Display detected communities
-    communities = hirag.communities
+    communities = manas.communities
     if communities:
         print(f"\n🏘️  Detected Communities ({len(communities)}):")
         for comm_id, community in list(communities.items())[:3]:
@@ -163,7 +163,7 @@ def main():
             print(f"   - {comm_id}: {node_count} entities")
 
     # Display community reports
-    reports = hirag.reports
+    reports = manas.reports
     if reports:
         print(f"\n📋 Community Reports ({len(reports)}):")
         for comm_id, report in list(reports.items())[:2]:
@@ -186,7 +186,7 @@ def main():
         print(f"   Query: {query}")
 
         try:
-            result = hirag.query(query, mode=mode)
+            result = manas.query(query, mode=mode)
 
             # Show context length instead of full answer (since it's mock)
             context = result.get('context', '')
@@ -219,7 +219,7 @@ def main():
     print(f"\n💡 To use with real OpenAI API:")
     print(f"   1. Set OPENAI_API_KEY in .env file")
     print(f"   2. Run: python examples/basic_usage.py")
-    print(f"\n📁 Demo data saved to: ./hirag_demo_data/")
+    print(f"\n📁 Demo data saved to: ./manas_demo_data/")
 
 
 if __name__ == "__main__":

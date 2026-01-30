@@ -1,4 +1,4 @@
-"""Vector store implementations for HiRAG.
+"""Vector store implementations for ManasRAG.
 
 This module provides specialized vector stores for entities and chunks,
 built on top of Haystack's document store abstraction.
@@ -23,7 +23,7 @@ class EntityVectorStore:
         self,
         embedding_func: Callable[[List[str]], List[List[float]]] | None = None,
         meta_fields: set | None = None,
-        working_dir: str = "./hirag_cache",
+        working_dir: str = "./manas_cache",
     ):
         """Initialize the entity vector store.
 

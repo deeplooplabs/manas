@@ -1,4 +1,4 @@
-"""Hierarchical retrieval component for HiRAG.
+"""Hierarchical retrieval component for ManasRAG.
 
 This component implements the multi-mode retrieval strategy, supporting:
 - naive: Basic document chunk retrieval
@@ -13,9 +13,9 @@ from typing import Any
 
 from haystack import component
 
-from hirag_haystack._logging import get_logger, trace
-from hirag_haystack.core.query_param import QueryParam
-from hirag_haystack.stores.base import GraphDocumentStore
+from manasrag._logging import get_logger, trace
+from manasrag.core.query_param import QueryParam
+from manasrag.stores.base import GraphDocumentStore
 
 
 @component

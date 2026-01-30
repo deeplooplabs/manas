@@ -12,9 +12,9 @@ Endpoints:
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
-from hirag_haystack import HiRAG, QueryParam
-from hirag_haystack.api.dependencies import get_hirag, run_in_executor
-from hirag_haystack.api.models import (
+from manasrag import ManasRAG, QueryParam
+from manasrag.api.dependencies import get_manasrag, run_in_executor
+from manasrag.api.models import (
     AVAILABLE_MODELS,
     MODEL_MODE_MAPPING,
     ChatCompletionChoice,
@@ -26,7 +26,7 @@ from hirag_haystack.api.models import (
     OpenAIModel,
     OpenAIModelList,
 )
-from hirag_haystack.api.streaming import generate_stream_response
+from manasrag.api.streaming import generate_stream_response
 
 router = APIRouter(prefix="/v1", tags=["openai"])
 
@@ -35,13 +35,13 @@ router = APIRouter(prefix="/v1", tags=["openai"])
 async def list_models() -> OpenAIModelList:
     """List available models.
 
-    Each model maps to a HiRAG retrieval mode:
-    - hirag / hirag-hi: Full hierarchical (hi mode)
-    - hirag-local: Entity-level only (hi_local mode)
-    - hirag-global: Community reports only (hi_global mode)
-    - hirag-bridge: Cross-community paths (hi_bridge mode)
-    - hirag-nobridge: Local + global without paths (hi_nobridge mode)
-    - hirag-naive: Simple chunk retrieval (naive mode)
+    Each model maps to a ManasRAG retrieval mode:
+    - manas / manas-hi: Full hierarchical (hi mode)
+    - manas-local: Entity-level only (hi_local mode)
+    - manas-global: Community reports only (hi_global mode)
+    - manas-bridge: Cross-community paths (hi_bridge mode)
+    - manas-nobridge: Local + global without paths (hi_nobridge mode)
+    - manas-naive: Simple chunk retrieval (naive mode)
     """
     models = [OpenAIModel(id=model_id) for model_id in AVAILABLE_MODELS]
     return OpenAIModelList(data=models)
@@ -51,23 +51,23 @@ async def list_models() -> OpenAIModelList:
 async def chat_completions(
     request: ChatCompletionRequest,
     project_id: str | None = Query(None, description="Project ID for data isolation"),
-    hirag: HiRAG = Depends(get_hirag),
+    manas: ManasRAG = Depends(get_manasrag),
 ):
     """Create a chat completion.
 
     Supports both streaming and non-streaming responses.
 
     The model field determines the retrieval mode:
-    - hirag, hirag-hi -> hi (full hierarchical)
-    - hirag-local -> hi_local
-    - hirag-global -> hi_global
-    - hirag-bridge -> hi_bridge
-    - hirag-nobridge -> hi_nobridge
-    - hirag-naive -> naive
+    - manas, manas-hi -> hi (full hierarchical)
+    - manas-local -> hi_local
+    - manas-global -> hi_global
+    - manas-bridge -> hi_bridge
+    - manas-nobridge -> hi_nobridge
+    - manas-naive -> naive
 
     Unknown model names default to 'hi' mode.
 
-    HiRAG-specific extensions can be passed in the request body:
+    ManasRAG-specific extensions can be passed in the request body:
     - top_k: Number of entities to retrieve
     - top_m: Key entities per community
     - response_type: Expected response format
@@ -102,7 +102,7 @@ async def chat_completions(
     if request.stream:
         # Streaming response
         return StreamingResponse(
-            _stream_chat_completion(hirag, user_message, mode, param, request.model, pid),
+            _stream_chat_completion(manas, user_message, mode, param, request.model, pid),
             media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",
@@ -114,7 +114,7 @@ async def chat_completions(
         # Non-streaming response
         try:
             result = await run_in_executor(
-                lambda: hirag.query(query=user_message, mode=mode, param=param, project_id=pid)
+                lambda: manas.query(query=user_message, mode=mode, param=param, project_id=pid)
             )
         except Exception as e:
             error_response = ErrorResponse(
@@ -138,7 +138,7 @@ async def chat_completions(
 
 
 async def _stream_chat_completion(
-    hirag: HiRAG,
+    manas: ManasRAG,
     query: str,
     mode: str,
     param: QueryParam,
@@ -147,14 +147,14 @@ async def _stream_chat_completion(
 ):
     """Generate streaming chat completion response.
 
-    HiRAG's query() is synchronous, so we:
+    ManasRAG's query() is synchronous, so we:
     1. Run it to completion in a thread executor
     2. Simulate streaming by yielding word-level chunks
     """
     try:
         # Run the full query in executor
         result = await run_in_executor(
-            lambda: hirag.query(query=query, mode=mode, param=param, project_id=project_id)
+            lambda: manas.query(query=query, mode=mode, param=param, project_id=project_id)
         )
         answer = result.get("answer", "")
 
@@ -164,7 +164,7 @@ async def _stream_chat_completion(
 
     except Exception as e:
         # Yield error as SSE event
-        from hirag_haystack.api.streaming import format_error_event
+        from manasrag.api.streaming import format_error_event
         yield format_error_event(f"Query failed: {str(e)}")
 
 

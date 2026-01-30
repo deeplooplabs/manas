@@ -1,4 +1,4 @@
-"""Neo4j implementation of GraphDocumentStore for HiRAG.
+"""Neo4j implementation of GraphDocumentStore for ManasRAG.
 
 This module provides a production-ready graph store using Neo4j,
 suitable for large-scale knowledge graphs.
@@ -8,12 +8,12 @@ from typing import Any, Optional
 
 from neo4j import GraphDatabase
 
-from hirag_haystack.stores.base import GraphDocumentStore
-from hirag_haystack.core.community import Community, SingleCommunitySchema
+from manasrag.stores.base import GraphDocumentStore
+from manasrag.core.community import Community, SingleCommunitySchema
 
 
 class Neo4jGraphStore(GraphDocumentStore):
-    """Neo4j-based graph store for HiRAG.
+    """Neo4j-based graph store for ManasRAG.
 
     Uses Neo4j for scalable graph storage and querying.
     Supports Cypher queries for efficient graph traversals.

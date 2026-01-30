@@ -1,6 +1,6 @@
-"""FastAPI dependencies for HiRAG API.
+"""FastAPI dependencies for ManasRAG API.
 
-This module provides dependency injection for accessing the HiRAG instance
+This module provides dependency injection for accessing the ManasRAG instance
 and other shared resources across route handlers.
 """
 
@@ -12,32 +12,32 @@ from typing import TYPE_CHECKING, Any, Callable, TypeVar
 from fastapi import Request
 
 if TYPE_CHECKING:
-    from hirag_haystack import HiRAG
+    from manasrag import ManasRAG
 
 
 T = TypeVar("T")
 
 # Module-level state (FastAPI runs in a single process, so this is safe)
-_hirag_instance: "HiRAG | None" = None
+_manas_instance: "ManasRAG | None" = None
 _executor: ThreadPoolExecutor | None = None
 _index_lock: threading.Lock | None = None
 
 
-def set_hirag_instance(hirag: "HiRAG") -> None:
-    """Set the global HiRAG instance.
+def set_manasrag_instance(manas: "ManasRAG") -> None:
+    """Set the global ManasRAG instance.
 
     Called during app startup/lifespan.
     """
-    global _hirag_instance
-    _hirag_instance = hirag
+    global _manas_instance
+    _manas_instance = manas
 
 
-def get_hirag_instance() -> "HiRAG | None":
-    """Get the global HiRAG instance.
+def get_manasrag_instance() -> "ManasRAG | None":
+    """Get the global ManasRAG instance.
 
     Returns None if not initialized.
     """
-    return _hirag_instance
+    return _manas_instance
 
 
 def set_executor(executor: ThreadPoolExecutor) -> None:
@@ -62,24 +62,24 @@ def get_index_lock() -> threading.Lock | None:
     return _index_lock
 
 
-def get_hirag(request: Request) -> "HiRAG":
-    """FastAPI dependency to get HiRAG instance.
+def get_manasrag(request: Request) -> "ManasRAG":
+    """FastAPI dependency to get ManasRAG instance.
 
-    This is used in route handlers via Depends(get_hirag).
+    This is used in route handlers via Depends(get_manasrag).
 
     Args:
         request: FastAPI request object (for accessing app state).
 
     Returns:
-        HiRAG instance.
+        ManasRAG instance.
 
     Raises:
-        RuntimeError: If HiRAG is not initialized.
+        RuntimeError: If ManasRAG is not initialized.
     """
-    hirag = request.app.state.hirag
-    if hirag is None:
-        raise RuntimeError("HiRAG instance not initialized")
-    return hirag
+    manas = request.app.state.manas
+    if manas is None:
+        raise RuntimeError("ManasRAG instance not initialized")
+    return manas
 
 
 async def run_in_executor(func: Callable[..., T], *args: Any) -> T:

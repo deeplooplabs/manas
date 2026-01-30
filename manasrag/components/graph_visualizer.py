@@ -1,4 +1,4 @@
-"""Graph visualization components for HiRAG knowledge graphs.
+"""Graph visualization components for ManasRAG knowledge graphs.
 
 This module provides interactive visualization capabilities for knowledge graphs,
 community structures, query paths, and entity statistics using pyvis and plotly.
@@ -15,9 +15,9 @@ from plotly import graph_objects as go
 from plotly.subplots import make_subplots
 from pyvis.network import Network
 
-from hirag_haystack.core.community import Community
-from hirag_haystack.stores.base import GraphDocumentStore
-from hirag_haystack.utils.color_utils import (
+from manasrag.core.community import Community
+from manasrag.stores.base import GraphDocumentStore
+from manasrag.utils.color_utils import (
     create_colormap,
     generate_community_colors,
     get_gradient_color,
@@ -26,7 +26,7 @@ from hirag_haystack.utils.color_utils import (
 
 
 class GraphVisualizer:
-    """Interactive visualization component for HiRAG knowledge graphs.
+    """Interactive visualization component for ManasRAG knowledge graphs.
 
     Generates HTML-based interactive visualizations using pyvis for network graphs
     and plotly for statistical charts.
@@ -34,7 +34,7 @@ class GraphVisualizer:
 
     def __init__(
         self,
-        output_dir: str = "./hirag_visualizations",
+        output_dir: str = "./manas_visualizations",
         default_layout: str = "hierarchical",
     ):
         """Initialize the visualizer.

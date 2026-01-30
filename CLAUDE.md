@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-HiRAG-Haystack implements the [HiRAG paper](https://arxiv.org/abs/2503.10150) (Hierarchical Retrieval-Augmented Generation) using the [Haystack](https://docs.haystack.deepset.ai/) framework. It builds knowledge graphs from documents via LLM entity extraction, detects communities with Louvain/Leiden clustering, generates community reports, and supports multiple retrieval modes.
+ManasRAG implements the [HiRAG paper](https://arxiv.org/abs/2503.10150) (Hierarchical Retrieval-Augmented Generation) using the [Haystack](https://docs.haystack.deepset.ai/) framework. It builds knowledge graphs from documents via LLM entity extraction, detects communities with Louvain/Leiden clustering, generates community reports, and supports multiple retrieval modes.
 
 ## Commands
 
@@ -16,10 +16,10 @@ uv sync
 uv run python examples/basic_usage.py
 
 # Lint
-ruff check hirag_haystack/
+ruff check manasrag/
 
 # Format
-ruff format hirag_haystack/
+ruff format manasrag/
 
 # Run tests (test files are in the project root, not tests/)
 uv run pytest test_*.py
@@ -32,12 +32,12 @@ Note: `pyproject.toml` declares `testpaths = ["tests"]` but no `tests/` director
 ### Layer Overview
 
 ```
-HiRAG (facade)  →  Pipelines  →  Components  →  Stores
-  __init__.py       pipelines/     components/     stores/
+ManasRAG (facade)  →  Pipelines  →  Components  →  Stores
+  __init__.py         pipelines/     components/     stores/
 ```
 
-- **`HiRAG`** (`__init__.py`): Facade class — the main user-facing API. Wires together stores, components, and pipelines. All public methods (`index()`, `query()`, `query_local()`, etc.) delegate to pipelines.
-- **Pipelines** (`pipelines/`): `HiRAGIndexingPipeline` and `HiRAGQueryPipeline` orchestrate Haystack components into end-to-end workflows.
+- **`ManasRAG`** (`__init__.py`): Facade class — the main user-facing API. Wires together stores, components, and pipelines. All public methods (`index()`, `query()`, `query_local()`, etc.) delegate to pipelines.
+- **Pipelines** (`pipelines/`): `ManasRAGIndexingPipeline` and `ManasRAGQueryPipeline` orchestrate Haystack components into end-to-end workflows.
 - **Components** (`components/`): Haystack `@component`-decorated classes with `run()` methods returning dicts. Each component does one job (extract entities, detect communities, retrieve, build context, etc.).
 - **Stores** (`stores/`): Storage backends. `GraphDocumentStore` is the ABC; `NetworkXGraphStore` (in-memory) and `Neo4jGraphStore` (production, optional import) implement it. `EntityVectorStore`, `ChunkVectorStore`, and `KVStore` handle embeddings and metadata.
 - **Core** (`core/`): Pure data structures — `Entity`, `Relation`, `NodeType` enum, `Community`, `QueryParam`, `RetrievalMode` enum. No business logic.
@@ -69,7 +69,7 @@ HiRAG (facade)  →  Pipelines  →  Components  →  Stores
 - **Types**: Python 3.10+ union syntax (`X | None`), `@dataclass` for data classes, `TypedDict` for typed dicts
 - **Naming**: `PascalCase` classes, `snake_case` functions, `_prefix` private attrs, `UPPER_SNAKE_CASE` constants grouped with `# ===== NAME =====` headers
 - **Imports**: `flake8: noqa` in `__init__.py` files; grouped stdlib → third-party → local
-- **Neo4j**: Optional import with try/except in `stores/__init__.py`; lazy import in `HiRAG.__init__`
+- **Neo4j**: Optional import with try/except in `stores/__init__.py`; lazy import in `ManasRAG.__init__`
 - **Ruff**: line-length 100, target Python 3.10
 
 ## Environment

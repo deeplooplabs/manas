@@ -1,8 +1,8 @@
-# HiRAG-Haystack
+# ManasRAG
 
 > Hierarchical Retrieval-Augmented Generation with Haystack
 
-This project implements [HiRAG](https://github.com/hhy-huang/HiRAG) using the [Haystack](https://github.com/deepset-ai/haystack) framework. HiRAG is a hierarchical knowledge retrieval approach that combines knowledge graphs with community-based summarization for improved RAG systems.
+This project implements [HiRAG](https://github.com/hhy-huang/HiRAG) using the [Haystack](https://github.com/deepset-ai/haystack) framework. ManasRAG is a hierarchical knowledge retrieval approach that combines knowledge graphs with community-based summarization for improved RAG systems.
 
 ## Features
 
@@ -56,13 +56,13 @@ The examples will automatically load environment variables from the `.env` file.
 ## Quick Start
 
 ```python
-from hirag_haystack import HiRAG
+from manasrag import ManasRAG
 from haystack.components.generators import OpenAIGenerator
 import os
 
 # Initialize with OpenAI
-hirag = HiRAG(
-    working_dir="./hirag_data",
+manas = ManasRAG(
+    working_dir="./manas_data",
     generator=OpenAIGenerator(
         model="gpt-4o-mini",
         api_key=os.getenv("OPENAI_API_KEY")
@@ -81,10 +81,10 @@ algorithms that can learn from data...
 Neural networks are computing systems inspired by biological neurons...
 """
 
-hirag.index(documents)
+manas.index(documents)
 
 # Query with different modes
-result = hirag.query(
+result = manas.query(
     "How are neural networks related to machine learning?",
     mode="hi"  # Full hierarchical retrieval
 )
@@ -107,7 +107,7 @@ print(result["answer"])
 ### Custom Query Parameters
 
 ```python
-from hirag_haystack import QueryParam
+from manasrag import QueryParam
 
 param = QueryParam(
     mode="hi",
@@ -117,7 +117,7 @@ param = QueryParam(
     response_type="Multiple Paragraphs",
 )
 
-result = hirag.query("Your query here", param=param)
+result = manas.query("Your query here", param=param)
 ```
 
 ### Using Custom LLM
@@ -129,14 +129,14 @@ generator = HuggingFaceLocalGenerator(
     model="HuggingFaceH4/zephyr-7b-beta"
 )
 
-hirag = HiRAG(generator=generator)
+manas = ManasRAG(generator=generator)
 ```
 
 ### Accessing Communities
 
 ```python
 # After indexing, access detected communities
-for comm_id, community in hirag.communities.items():
+for comm_id, community in manas.communities.items():
     print(f"Community: {community.title}")
     print(f"Entities: {len(community.nodes)}")
     print(f"Report: {community.report_string[:200]}...")
@@ -171,7 +171,7 @@ for comm_id, community in hirag.communities.items():
 ## Project Structure
 
 ```
-hirag_haystack/
+manasrag/
 ├── core/           # Core data structures
 ├── stores/         # Graph storage backends
 ├── components/     # Haystack components

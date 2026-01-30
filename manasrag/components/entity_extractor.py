@@ -1,7 +1,7 @@
 """Entity and relationship extraction component.
 
 This component uses LLMs to extract entities and relationships from text chunks,
-supporting the hierarchical extraction approach used in HiRAG.
+supporting the hierarchical extraction approach used in ManasRAG.
 """
 
 import re
@@ -12,8 +12,8 @@ from haystack import component
 from haystack.dataclasses import Document
 from haystack.dataclasses.chat_message import ChatMessage
 
-from hirag_haystack._logging import get_logger, trace
-from hirag_haystack.core.graph import Entity, Relation
+from manasrag._logging import get_logger, trace
+from manasrag.core.graph import Entity, Relation
 
 
 # Default entity types to extract
@@ -37,7 +37,7 @@ DEFAULT_COMPLETION_DELIMITER = "<|COMPLETION|>"
 class EntityExtractor:
     """Extract entities and relationships from documents using LLM.
 
-    This component implements the entity extraction strategy from HiRAG,
+    This component implements the entity extraction strategy from ManasRAG,
     including:
     - Entity extraction with type classification
     - Relationship extraction between entities

@@ -12,18 +12,18 @@ from typing import Any, Optional
 import networkx as nx
 import community as community_louvain
 
-from hirag_haystack.core.community import Community, SingleCommunitySchema
-from hirag_haystack.core.graph import Entity, Relation
-from hirag_haystack.stores.base import GraphDocumentStore
+from manasrag.core.community import Community, SingleCommunitySchema
+from manasrag.core.graph import Entity, Relation
+from manasrag.stores.base import GraphDocumentStore
 
 
 class NetworkXGraphStore(GraphDocumentStore):
-    """NetworkX-based graph store for HiRAG.
+    """NetworkX-based graph store for ManasRAG.
 
     Uses NetworkX for graph operations and python-louvain for
     community detection (Louvain method).
 
-    Note: The original HiRAG paper uses Leiden algorithm for better
+    Note: The original ManasRAG paper uses Leiden algorithm for better
     quality communities. This implementation uses Louvain (via python-louvain
     package) as it's available without external dependencies. For Leiden
     algorithm, use Neo4jGraphStore with Neo4j GDS library.

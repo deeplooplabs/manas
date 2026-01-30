@@ -1,4 +1,4 @@
-"""Community report generation component for HiRAG.
+"""Community report generation component for ManasRAG.
 
 This component uses LLMs to generate summary reports for each detected community,
 providing high-level overviews of the entities and relationships within.
@@ -10,9 +10,9 @@ from typing import Any
 from haystack import component
 from haystack.dataclasses.chat_message import ChatMessage
 
-from hirag_haystack._logging import get_logger
-from hirag_haystack.core.community import Community
-from hirag_haystack.stores.base import GraphDocumentStore
+from manasrag._logging import get_logger
+from manasrag.core.community import Community
+from manasrag.stores.base import GraphDocumentStore
 
 
 @component

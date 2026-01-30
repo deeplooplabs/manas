@@ -1,4 +1,4 @@
-"""Indexing pipeline for HiRAG.
+"""Indexing pipeline for ManasRAG.
 
 This module implements the document indexing pipeline that:
 1. Splits documents into chunks
@@ -16,19 +16,19 @@ from haystack import Pipeline, component
 from haystack.dataclasses import Document
 from haystack.components.preprocessors import DocumentSplitter
 
-from hirag_haystack._logging import get_logger
-from hirag_haystack.components.entity_extractor import (
+from manasrag._logging import get_logger
+from manasrag.components.entity_extractor import (
     EntityExtractor,
 )
-from hirag_haystack.components.community_detector import CommunityDetector
-from hirag_haystack.components.report_generator import CommunityReportGenerator
-from hirag_haystack.stores.base import GraphDocumentStore
-from hirag_haystack.stores.networkx_store import NetworkXGraphStore
-from hirag_haystack.stores.vector_store import (
+from manasrag.components.community_detector import CommunityDetector
+from manasrag.components.report_generator import CommunityReportGenerator
+from manasrag.stores.base import GraphDocumentStore
+from manasrag.stores.networkx_store import NetworkXGraphStore
+from manasrag.stores.vector_store import (
     KVStore,
     DocIdIndex,
 )
-from hirag_haystack.utils.token_utils import (
+from manasrag.utils.token_utils import (
     compute_mdhash_id,
     count_tokens,
 )
@@ -123,8 +123,8 @@ class GraphIndexer:
         return {"success": True}
 
 
-class HiRAGIndexingPipeline:
-    """Pipeline for indexing documents into HiRAG.
+class ManasRAGIndexingPipeline:
+    """Pipeline for indexing documents into ManasRAG.
 
     This pipeline orchestrates the full indexing process:
     1. Document splitting
@@ -146,7 +146,7 @@ class HiRAGIndexingPipeline:
         report_generator: CommunityReportGenerator | None = None,
         chunk_size: int = 1200,
         chunk_overlap: int = 100,
-        working_dir: str = "./hirag_cache",
+        working_dir: str = "./manas_cache",
         enable_incremental: bool = True,
     ):
         """Initialize the indexing pipeline.
@@ -165,7 +165,7 @@ class HiRAGIndexingPipeline:
             enable_incremental: Whether to support incremental updates.
         """
         self.graph_store = graph_store or NetworkXGraphStore(
-            namespace="hirag",
+            namespace="manas",
             working_dir=working_dir,
         )
         self.document_store = document_store
@@ -208,7 +208,7 @@ class HiRAGIndexingPipeline:
         self,
         documents: list[Document],
     ) -> dict:
-        """Index documents into the HiRAG system.
+        """Index documents into the ManasRAG system.
 
         Args:
             documents: List of Haystack Document objects to index.
@@ -517,7 +517,7 @@ class HiRAGIndexingPipeline:
         """Save current state to disk."""
         # Save communities (convert Community objects to dicts for serialization)
         comm_store = KVStore("communities", self.working_dir)
-        from hirag_haystack.core.community import Community
+        from manasrag.core.community import Community
 
         serializable_communities = {}
         for k, v in self._communities.items():
@@ -678,7 +678,7 @@ def build_indexing_pipeline(
     generator: Any = None,
     document_store: Any = None,
 ) -> Pipeline:
-    """Build a Haystack Pipeline for HiRAG indexing.
+    """Build a Haystack Pipeline for ManasRAG indexing.
 
     Args:
         graph_store: Graph store for knowledge graph.

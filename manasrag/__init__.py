@@ -4,12 +4,12 @@ from typing import Any, NamedTuple
 
 from haystack.dataclasses import Document
 
-from hirag_haystack._logging import (
+from manasrag._logging import (
     _setup_component_loggers,
     get_logger,
     LOG_LEVELS,
 )
-from hirag_haystack.core import (
+from manasrag.core import (
     Entity,
     Relation,
     NodeType,
@@ -18,7 +18,7 @@ from hirag_haystack.core import (
     QueryParam,
     RetrievalMode,
 )
-from hirag_haystack.stores import (
+from manasrag.stores import (
     GraphDocumentStore,
     NetworkXGraphStore,
     Neo4jGraphStore,
@@ -27,8 +27,8 @@ from hirag_haystack.stores import (
     KVStore,
     DocIdIndex,
 )
-from hirag_haystack.pipelines import HiRAGIndexingPipeline, HiRAGQueryPipeline
-from hirag_haystack.components import (
+from manasrag.pipelines import ManasRAGIndexingPipeline, ManasRAGQueryPipeline
+from manasrag.components import (
     EntityExtractor,
     CommunityDetector,
     CommunityReportGenerator,
@@ -41,7 +41,7 @@ from hirag_haystack.components import (
     PathScorer,
     GraphVisualizer,
 )
-from hirag_haystack.document_loader import DocumentLoader
+from manasrag.document_loader import DocumentLoader
 
 __all__ = [
     # Core
@@ -73,10 +73,10 @@ __all__ = [
     "PathScorer",
     "GraphVisualizer",
     # Pipelines
-    "HiRAGIndexingPipeline",
-    "HiRAGQueryPipeline",
+    "ManasRAGIndexingPipeline",
+    "ManasRAGQueryPipeline",
     # High-level API
-    "HiRAG",
+    "ManasRAG",
     # Types
     "ProjectPipelines",
     # Document loading
@@ -89,13 +89,13 @@ __version__ = "0.1.0"
 class ProjectPipelines(NamedTuple):
     """Per-project pipeline components."""
 
-    indexing_pipeline: HiRAGIndexingPipeline
-    query_pipeline: HiRAGQueryPipeline
+    indexing_pipeline: ManasRAGIndexingPipeline
+    query_pipeline: ManasRAGQueryPipeline
     graph_store: GraphDocumentStore
 
 
-class HiRAG:
-    """High-level API for HiRAG.
+class ManasRAG:
+    """High-level API for ManasRAG.
 
     This class provides a simple interface for indexing and querying
     documents using the hierarchical knowledge approach.
@@ -105,21 +105,21 @@ class HiRAG:
 
     Example:
         ```python
-        from hirag_haystack import HiRAG
+        from manasrag import ManasRAG
 
         # Initialize
-        hirag = HiRAG(working_dir="./hirag_data")
+        manas = ManasRAG(working_dir="./manas_data")
 
         # Index documents
-        hirag.index("path/to/document.txt")
+        manas.index("path/to/document.txt")
 
         # Query
-        result = hirag.query("What are the main themes?")
+        result = manas.query("What are the main themes?")
         print(result["answer"])
 
         # Multi-project usage
-        hirag.index([Document(id="d1", content="AI content")], project_id="proj_a")
-        hirag.query("What is AI?", project_id="proj_a")
+        manas.index([Document(id="d1", content="AI content")], project_id="proj_a")
+        manas.query("What is AI?", project_id="proj_a")
         ```
     """
 
@@ -169,9 +169,9 @@ class HiRAG:
 
         # Configure logging
         _setup_component_loggers(log_level)
-        self._logger = get_logger("HiRAG")
+        self._logger = get_logger("ManasRAG")
 
-        self._logger.info(f"HiRAG initialized (working_dir={working_dir}, log_level={log_level})")
+        self._logger.info(f"ManasRAG initialized (working_dir={working_dir}, log_level={log_level})")
 
         # Per-project pipeline cache: project_id -> ProjectPipelines
         self._project_pipelines: dict[str, ProjectPipelines] = {}
@@ -200,7 +200,7 @@ class HiRAG:
             ProjectPipelines containing (indexing_pipeline, query_pipeline, graph_store).
         """
         project_dir = str(Path(self.working_dir) / project_id)
-        namespace = f"hirag_{project_id}"
+        namespace = f"manas_{project_id}"
 
         # Graph store
         if self.graph_backend == "networkx":
@@ -209,7 +209,7 @@ class HiRAG:
                 working_dir=project_dir,
             )
         else:
-            from hirag_haystack.stores.neo4j_store import Neo4jGraphStore
+            from manasrag.stores.neo4j_store import Neo4jGraphStore
 
             graph_store = Neo4jGraphStore(
                 namespace=namespace,
@@ -224,7 +224,7 @@ class HiRAG:
         )
 
         # Pipelines
-        indexing_pipeline = HiRAGIndexingPipeline(
+        indexing_pipeline = ManasRAGIndexingPipeline(
             graph_store=graph_store,
             document_store=self.chunk_store,
             entity_store=self.entity_store,
@@ -237,7 +237,7 @@ class HiRAG:
             working_dir=project_dir,
         )
 
-        query_pipeline = HiRAGQueryPipeline(
+        query_pipeline = ManasRAGQueryPipeline(
             graph_store=graph_store,
             entity_store=self.entity_store,
             chunk_store=self.chunk_store,
@@ -285,7 +285,7 @@ class HiRAG:
         incremental: bool = False,
         force_reindex: bool = False,
     ) -> dict:
-        """Index documents into the HiRAG system.
+        """Index documents into the ManasRAG system.
 
         Args:
             documents: List of Haystack Document objects to index.
@@ -311,7 +311,7 @@ class HiRAG:
         param: QueryParam | None = None,
         project_id: str = "default",
     ) -> dict:
-        """Query the HiRAG system.
+        """Query the ManasRAG system.
 
         Args:
             query: User query string.
@@ -482,13 +482,13 @@ class HiRAG:
 
         Example:
             ```python
-            hirag = HiRAG(working_dir="./hirag_data")
+            manas = ManasRAG(working_dir="./manas_data")
 
             # Generate all visualizations
-            results = hirag.visualize(kind="all")
+            results = manas.visualize(kind="all")
 
             # Generate only knowledge graph
-            kg_path = hirag.visualize(kind="graph", layout="force")
+            kg_path = manas.visualize(kind="graph", layout="force")
             ```
         """
         graph_store = self._get_project(project_id).graph_store

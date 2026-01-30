@@ -1,4 +1,4 @@
-"""Base class for graph document storage in HiRAG.
+"""Base class for graph document storage in ManasRAG.
 
 This module defines the abstract interface for graph storage backends
 that support hierarchical knowledge operations.
@@ -8,8 +8,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
-from hirag_haystack.core.community import Community, CommunitySchema, SingleCommunitySchema
-from hirag_haystack.core.graph import Entity, Relation
+from manasrag.core.community import Community, CommunitySchema, SingleCommunitySchema
+from manasrag.core.graph import Entity, Relation
 
 
 @dataclass
@@ -17,7 +17,7 @@ class StorageConfig:
     """Configuration for storage backends."""
 
     namespace: str = "default"
-    working_dir: str = "./hirag_cache"
+    working_dir: str = "./manas_cache"
     global_config: dict = field(default_factory=dict)
 
 

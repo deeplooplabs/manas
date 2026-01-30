@@ -1,12 +1,12 @@
-"""Hierarchical entity extraction component for HiRAG.
+"""Hierarchical entity extraction component for ManasRAG.
 
-This module implements the two-stage entity extraction strategy from HiRAG:
+This module implements the two-stage entity extraction strategy from ManasRAG:
 1. Extract entities from chunks
 2. Extract relations using entity embeddings
 3. Perform hierarchical clustering
 4. Merge clustered entities
 
-This is the core innovation that differentiates HiRAG from other GraphRAG approaches.
+This is the core innovation that differentiates ManasRAG from other GraphRAG approaches.
 """
 
 import json
@@ -17,14 +17,14 @@ from haystack import component
 from haystack.dataclasses import Document
 from haystack.dataclasses.chat_message import ChatMessage
 
-from hirag_haystack.core.graph import Entity, Relation, NodeType
-from hirag_haystack.prompts import (
+from manasrag.core.graph import Entity, Relation, NodeType
+from manasrag.prompts import (
     DEFAULT_TUPLE_DELIMITER,
     DEFAULT_RECORD_DELIMITER,
     DEFAULT_COMPLETION_DELIMITER,
     DEFAULT_ENTITY_TYPES,
 )
-from hirag_haystack.utils.token_utils import (
+from manasrag.utils.token_utils import (
     split_string_by_multi_markers,
     compute_mdhash_id,
 )

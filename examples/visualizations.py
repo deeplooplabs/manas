@@ -1,4 +1,4 @@
-"""Visualization examples for HiRAG-Haystack.
+"""Visualization examples for ManasRAG.
 
 This example demonstrates:
 1. Visualizing the complete knowledge graph
@@ -16,9 +16,9 @@ from dotenv import load_dotenv
 
 from haystack.components.generators import OpenAIGenerator
 
-from hirag_haystack import HiRAG
-from hirag_haystack.components import GraphVisualizer
-from hirag_haystack.stores import EntityVectorStore, ChunkVectorStore
+from manasrag import ManasRAG
+from manasrag.components import GraphVisualizer
+from manasrag.stores import EntityVectorStore, ChunkVectorStore
 
 
 def visualize_knowledge_graph_example():
@@ -27,25 +27,25 @@ def visualize_knowledge_graph_example():
     print("1. Knowledge Graph Visualization")
     print("=" * 60)
 
-    # Load or create HiRAG instance
-    working_dir = "./hirag_data"
+    # Load or create ManasRAG instance
+    working_dir = "./manas_data"
     if not Path(working_dir).exists():
         print(f"No data found at {working_dir}")
         print("Please run basic_usage.py first to create some data.")
         return None
 
-    # Initialize HiRAG
-    hirag = HiRAG(working_dir=working_dir)
+    # Initialize ManasRAG
+    manas = ManasRAG(working_dir=working_dir)
 
     # Create visualizer
     visualizer = GraphVisualizer(
-        output_dir="./hirag_visualizations",
+        output_dir="./manas_visualizations",
         default_layout="hierarchical",
     )
 
     # Generate knowledge graph visualization
     html_path = visualizer.visualize_knowledge_graph(
-        graph_store=hirag.graph_store,
+        graph_store=manas.graph_store,
         layout="force",
         color_by="entity_type",
         show_labels=True,
@@ -66,24 +66,24 @@ def visualize_communities_example():
     print("2. Community Visualization")
     print("=" * 60)
 
-    # Load HiRAG instance
-    working_dir = "./hirag_data"
+    # Load ManasRAG instance
+    working_dir = "./manas_data"
     if not Path(working_dir).exists():
         print(f"No data found at {working_dir}")
         return None
 
-    hirag = HiRAG(working_dir=working_dir)
+    manas = ManasRAG(working_dir=working_dir)
     visualizer = GraphVisualizer()
 
     # Detect communities if not already done
-    if not hirag.communities:
+    if not manas.communities:
         print("Detecting communities...")
-        hirag.communities = hirag.graph_store.clustering()
+        manas.communities = manas.graph_store.clustering()
 
     # Visualize communities
     html_path = visualizer.visualize_communities(
-        communities=hirag.communities,
-        graph_store=hirag.graph_store,
+        communities=manas.communities,
+        graph_store=manas.graph_store,
         layout="force",
         show_community_labels=True,
         show_entity_labels=False,
@@ -92,7 +92,7 @@ def visualize_communities_example():
     )
 
     print(f"[OK] Community visualization saved to: {html_path}")
-    print(f"  - Found {len(hirag.communities)} communities")
+    print(f"  - Found {len(manas.communities)} communities")
 
     return html_path
 
@@ -103,13 +103,13 @@ def visualize_query_path_example():
     print("3. Query Path Visualization")
     print("=" * 60)
 
-    # Load HiRAG instance
-    working_dir = "./hirag_data"
+    # Load ManasRAG instance
+    working_dir = "./manas_data"
     if not Path(working_dir).exists():
         print(f"No data found at {working_dir}")
         return None
 
-    hirag = HiRAG(working_dir=working_dir)
+    manas = ManasRAG(working_dir=working_dir)
     visualizer = GraphVisualizer()
 
     # Find a path between two entities
@@ -119,12 +119,12 @@ def visualize_query_path_example():
 
     print(f"Finding path from '{source}' to '{target}'...")
 
-    path = hirag.graph_store.shortest_path(source, target)
+    path = manas.graph_store.shortest_path(source, target)
 
     if path and len(path) > 1:
         html_path = visualizer.visualize_query_path(
             path=path,
-            graph_store=hirag.graph_store,
+            graph_store=manas.graph_store,
             show_context=1,  # Show 1 level of neighboring nodes
             animate=True,
             include_relation_descriptions=True,
@@ -147,18 +147,18 @@ def visualize_statistics_example():
     print("4. Entity Statistics Visualization")
     print("=" * 60)
 
-    # Load HiRAG instance
-    working_dir = "./hirag_data"
+    # Load ManasRAG instance
+    working_dir = "./manas_data"
     if not Path(working_dir).exists():
         print(f"No data found at {working_dir}")
         return None
 
-    hirag = HiRAG(working_dir=working_dir)
+    manas = ManasRAG(working_dir=working_dir)
     visualizer = GraphVisualizer()
 
     # Generate statistics dashboard
     html_path = visualizer.visualize_entity_stats(
-        graph_store=hirag.graph_store,
+        graph_store=manas.graph_store,
         chart_types=["distribution", "degree"],
         show_top_n=20,
     )
@@ -175,24 +175,24 @@ def visualize_all_example():
     print("5. Generate All Visualizations")
     print("=" * 60)
 
-    # Load HiRAG instance
-    working_dir = "./hirag_data"
+    # Load ManasRAG instance
+    working_dir = "./manas_data"
     if not Path(working_dir).exists():
         print(f"No data found at {working_dir}")
         return {}
 
-    hirag = HiRAG(working_dir=working_dir)
-    visualizer = GraphVisualizer(output_dir="./hirag_visualizations")
+    manas = ManasRAG(working_dir=working_dir)
+    visualizer = GraphVisualizer(output_dir="./manas_visualizations")
 
     # Detect communities if needed
-    if not hirag.communities:
+    if not manas.communities:
         print("Detecting communities...")
-        hirag.communities = hirag.graph_store.clustering()
+        manas.communities = manas.graph_store.clustering()
 
     # Generate all visualizations
     results = visualizer.visualize_all(
-        graph_store=hirag.graph_store,
-        communities=hirag.communities,
+        graph_store=manas.graph_store,
+        communities=manas.communities,
     )
 
     print("\nGenerated visualizations:")
@@ -208,18 +208,18 @@ def visualize_with_customization_example():
     print("6. Customized Visualization")
     print("=" * 60)
 
-    # Load HiRAG instance
-    working_dir = "./hirag_data"
+    # Load ManasRAG instance
+    working_dir = "./manas_data"
     if not Path(working_dir).exists():
         print(f"No data found at {working_dir}")
         return None
 
-    hirag = HiRAG(working_dir=working_dir)
+    manas = ManasRAG(working_dir=working_dir)
     visualizer = GraphVisualizer()
 
     # Custom knowledge graph with advanced options
     html_path = visualizer.visualize_knowledge_graph(
-        graph_store=hirag.graph_store,
+        graph_store=manas.graph_store,
         layout="force",
         color_by="community",  # Color by community instead of type
         node_size="degree",  # Size by degree

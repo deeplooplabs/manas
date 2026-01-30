@@ -66,12 +66,12 @@ venv.bak/
 *~
 .DS_Store
 
-# HiRAG specific
-hirag_data/
-hirag_demo_data/
-hirag_cache/
+# ManasRAG specific
+manas_data/
+manas_demo_data/
+manas_cache/
 *.json.bak
-hirag_visualizations/
+manas_visualizations/
 
 # Test and debug files
 test_*.py

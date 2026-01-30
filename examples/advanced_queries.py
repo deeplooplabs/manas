@@ -1,4 +1,4 @@
-"""Advanced query examples for HiRAG-Haystack.
+"""Advanced query examples for ManasRAG.
 
 This example demonstrates:
 1. Using QueryParam for fine-grained control
@@ -15,12 +15,12 @@ from haystack.document_stores.in_memory import InMemoryDocumentStore
 
 from haystack.dataclasses import Document
 
-from hirag_haystack import HiRAG, QueryParam
-from hirag_haystack.stores import EntityVectorStore, ChunkVectorStore
+from manasrag import ManasRAG, QueryParam
+from manasrag.stores import EntityVectorStore, ChunkVectorStore
 
 
 def main():
-    """Run advanced HiRAG query examples."""
+    """Run advanced ManasRAG query examples."""
 
     # Load environment variables from .env file
     load_dotenv()

@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "hirag-haystack"
+name = "manas"
 version = "0.1.0"
 description = "Hierarchical Retrieval-Augmented Generation with Haystack"
 readme = "README.md"
@@ -65,26 +65,26 @@ api = [
     "uvicorn[standard]>=0.24.0",
 ]
 all = [
-    "hirag-haystack[dev,neo4j,openai,scikit-learn,visualization,cli,api]",
+    "manas[dev,neo4j,openai,scikit-learn,visualization,cli,api]",
 ]
 
 [project.scripts]
-hirag = "hirag_haystack.cli:cli"
+manas = "manasrag.cli:cli"
 
 [project.urls]
-Homepage = "https://github.com/yourusername/hirag-haystack"
-Documentation = "https://github.com/yourusername/hirag-haystack#readme"
-Source = "https://github.com/yourusername/hirag-haystack"
+Homepage = "https://github.com/yourusername/manas"
+Documentation = "https://github.com/yourusername/manas#readme"
+Source = "https://github.com/yourusername/manas"
 
 [tool.hatch.build.targets.wheel]
-packages = ["hirag_haystack"]
+packages = ["manasrag"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 
 [tool.coverage.run]
-source = ["hirag_haystack"]
+source = ["manasrag"]
 
 [tool.ruff]
 target-version = "py310"

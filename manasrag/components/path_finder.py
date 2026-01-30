@@ -1,4 +1,4 @@
-"""Path finder component for HiRAG.
+"""Path finder component for ManasRAG.
 
 This component provides advanced path finding capabilities for
 cross-community reasoning in the knowledge graph.
@@ -8,7 +8,7 @@ from typing import Any, List, Optional
 
 from haystack import component
 
-from hirag_haystack.stores.base import GraphDocumentStore
+from manasrag.stores.base import GraphDocumentStore
 
 
 @component

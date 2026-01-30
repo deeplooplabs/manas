@@ -1,4 +1,4 @@
-"""Query pipeline for HiRAG.
+"""Query pipeline for ManasRAG.
 
 This module implements the query pipeline that:
 1. Retrieves relevant entities
@@ -12,13 +12,13 @@ from typing import Any
 from haystack import Pipeline, component
 from haystack.dataclasses.chat_message import ChatMessage
 
-from hirag_haystack._logging import get_logger
-from hirag_haystack.core.query_param import QueryParam
-from hirag_haystack.components.hierarchical_retriever import (
+from manasrag._logging import get_logger
+from manasrag.core.query_param import QueryParam
+from manasrag.components.hierarchical_retriever import (
     EntityRetriever,
     HierarchicalRetriever,
 )
-from hirag_haystack.stores.base import GraphDocumentStore
+from manasrag.stores.base import GraphDocumentStore
 
 
 @component
@@ -127,8 +127,8 @@ class QueryModeRouter:
         return {"mode": determined_mode, "query": query}
 
 
-class HiRAGQueryPipeline:
-    """Pipeline for querying the HiRAG system.
+class ManasRAGQueryPipeline:
+    """Pipeline for querying the ManasRAG system.
 
     Supports multiple retrieval modes:
     - naive: Basic RAG
@@ -313,7 +313,7 @@ def build_query_pipeline(
     chunk_store: Any = None,
     generator: Any = None,
 ) -> Pipeline:
-    """Build a Haystack Pipeline for HiRAG querying.
+    """Build a Haystack Pipeline for ManasRAG querying.
 
     Args:
         graph_store: Graph store for knowledge graph.

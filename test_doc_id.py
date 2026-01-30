@@ -1,7 +1,7 @@
-"""Tests for external doc_id support in HiRAG.
+"""Tests for external doc_id support in ManasRAG.
 
 Tests cover: DocIdIndex, graph store delete operations,
-indexing pipeline doc_id tracking, HiRAG facade methods,
+indexing pipeline doc_id tracking, ManasRAG facade methods,
 and project_id isolation.
 """
 
@@ -14,10 +14,10 @@ import pytest
 
 from haystack.dataclasses import Document
 
-from hirag_haystack import HiRAG
-from hirag_haystack.stores.vector_store import DocIdIndex, ChunkVectorStore, EntityVectorStore, KVStore
-from hirag_haystack.stores.networkx_store import NetworkXGraphStore
-from hirag_haystack.pipelines.indexing import HiRAGIndexingPipeline
+from manasrag import ManasRAG
+from manasrag.stores.vector_store import DocIdIndex, ChunkVectorStore, EntityVectorStore, KVStore
+from manasrag.stores.networkx_store import NetworkXGraphStore
+from manasrag.pipelines.indexing import ManasRAGIndexingPipeline
 
 
 # ===== Fixtures =====
@@ -54,7 +54,7 @@ def entity_store(tmp_dir):
 @pytest.fixture
 def pipeline(tmp_dir, graph_store, chunk_store, entity_store):
     """Create a pipeline without LLM (entity extractor=None)."""
-    return HiRAGIndexingPipeline(
+    return ManasRAGIndexingPipeline(
         graph_store=graph_store,
         chunk_store=chunk_store,
         entity_store=entity_store,
@@ -291,7 +291,7 @@ class TestSharedEntitySurvival:
         chunk_store = ChunkVectorStore(working_dir=tmp_dir)
         entity_store = EntityVectorStore(working_dir=tmp_dir)
 
-        pipeline = HiRAGIndexingPipeline(
+        pipeline = ManasRAGIndexingPipeline(
             graph_store=graph_store,
             chunk_store=chunk_store,
             entity_store=entity_store,
@@ -341,7 +341,7 @@ class TestSharedEntitySurvival:
 
 class TestPersistenceAfterDelete:
     def test_index_persists_after_delete(self, tmp_dir):
-        pipeline = HiRAGIndexingPipeline(
+        pipeline = ManasRAGIndexingPipeline(
             graph_store=NetworkXGraphStore(namespace="test", working_dir=tmp_dir),
             chunk_store=ChunkVectorStore(working_dir=tmp_dir),
             entity_store=EntityVectorStore(working_dir=tmp_dir),
@@ -384,70 +384,70 @@ class TestChunkVectorStoreDocId:
 
 
 class TestProjectIdIsolation:
-    """Tests for project_id-based data isolation in HiRAG facade."""
+    """Tests for project_id-based data isolation in ManasRAG facade."""
 
     @pytest.fixture
-    def hirag(self, tmp_dir):
-        return HiRAG(working_dir=tmp_dir)
+    def manas(self, tmp_dir):
+        return ManasRAG(working_dir=tmp_dir)
 
-    def test_project_id_isolation(self, hirag):
+    def test_project_id_isolation(self, manas):
         """Index into two projects and verify each only sees its own docs."""
-        hirag.index([Document(id="d1", content="AI content")], project_id="proj_a")
-        hirag.index([Document(id="d2", content="ML content")], project_id="proj_b")
+        manas.index([Document(id="d1", content="AI content")], project_id="proj_a")
+        manas.index([Document(id="d2", content="ML content")], project_id="proj_b")
 
-        assert hirag.list_documents(project_id="proj_a") == ["d1"]
-        assert hirag.list_documents(project_id="proj_b") == ["d2"]
+        assert manas.list_documents(project_id="proj_a") == ["d1"]
+        assert manas.list_documents(project_id="proj_b") == ["d2"]
 
-        assert hirag.has_document("d1", project_id="proj_a")
-        assert not hirag.has_document("d1", project_id="proj_b")
-        assert hirag.has_document("d2", project_id="proj_b")
-        assert not hirag.has_document("d2", project_id="proj_a")
+        assert manas.has_document("d1", project_id="proj_a")
+        assert not manas.has_document("d1", project_id="proj_b")
+        assert manas.has_document("d2", project_id="proj_b")
+        assert not manas.has_document("d2", project_id="proj_a")
 
-    def test_default_project_id(self, hirag):
+    def test_default_project_id(self, manas):
         """Omitting project_id uses 'default'."""
-        hirag.index([Document(id="d0", content="Default content")])
-        assert hirag.list_documents() == ["d0"]
-        assert hirag.list_documents(project_id="default") == ["d0"]
-        assert hirag.has_document("d0")
-        assert hirag.has_document("d0", project_id="default")
+        manas.index([Document(id="d0", content="Default content")])
+        assert manas.list_documents() == ["d0"]
+        assert manas.list_documents(project_id="default") == ["d0"]
+        assert manas.has_document("d0")
+        assert manas.has_document("d0", project_id="default")
 
-    def test_default_does_not_leak_to_other_project(self, hirag):
+    def test_default_does_not_leak_to_other_project(self, manas):
         """Default project data is not visible in a named project."""
-        hirag.index([Document(id="d0", content="Default content")])
-        assert hirag.list_documents(project_id="other") == []
-        assert not hirag.has_document("d0", project_id="other")
+        manas.index([Document(id="d0", content="Default content")])
+        assert manas.list_documents(project_id="other") == []
+        assert not manas.has_document("d0", project_id="other")
 
-    def test_delete_with_project_id(self, hirag):
+    def test_delete_with_project_id(self, manas):
         """Delete in one project does not affect another."""
-        hirag.index([Document(id="d1", content="Content A")], project_id="proj_a")
-        hirag.index([Document(id="d1", content="Content B")], project_id="proj_b")
+        manas.index([Document(id="d1", content="Content A")], project_id="proj_a")
+        manas.index([Document(id="d1", content="Content B")], project_id="proj_b")
 
-        hirag.delete("d1", project_id="proj_a")
+        manas.delete("d1", project_id="proj_a")
 
-        assert not hirag.has_document("d1", project_id="proj_a")
-        assert hirag.has_document("d1", project_id="proj_b")
+        assert not manas.has_document("d1", project_id="proj_a")
+        assert manas.has_document("d1", project_id="proj_b")
 
-    def test_project_pipelines_are_cached(self, hirag):
+    def test_project_pipelines_are_cached(self, manas):
         """Accessing the same project_id twice returns the same pipeline objects."""
-        p1 = hirag._get_project("cached_proj")
-        p2 = hirag._get_project("cached_proj")
+        p1 = manas._get_project("cached_proj")
+        p2 = manas._get_project("cached_proj")
         assert p1[0] is p2[0]
         assert p1[1] is p2[1]
         assert p1[2] is p2[2]
 
-    def test_backward_compat_aliases(self, hirag):
+    def test_backward_compat_aliases(self, manas):
         """self.indexing_pipeline, query_pipeline, graph_store point to default project."""
-        default = hirag._get_project("default")
-        assert hirag.indexing_pipeline is default[0]
-        assert hirag.query_pipeline is default[1]
-        assert hirag.graph_store is default[2]
+        default = manas._get_project("default")
+        assert manas.indexing_pipeline is default[0]
+        assert manas.query_pipeline is default[1]
+        assert manas.graph_store is default[2]
 
-    def test_project_uses_separate_directories(self, hirag):
+    def test_project_uses_separate_directories(self, manas):
         """Each project stores data under {working_dir}/{project_id}/."""
-        hirag.index([Document(id="d1", content="A")], project_id="alpha")
-        hirag.index([Document(id="d2", content="B")], project_id="beta")
+        manas.index([Document(id="d1", content="A")], project_id="alpha")
+        manas.index([Document(id="d2", content="B")], project_id="beta")
 
-        alpha_dir = Path(hirag.working_dir) / "alpha"
-        beta_dir = Path(hirag.working_dir) / "beta"
+        alpha_dir = Path(manas.working_dir) / "alpha"
+        beta_dir = Path(manas.working_dir) / "beta"
         assert alpha_dir.exists()
         assert beta_dir.exists()

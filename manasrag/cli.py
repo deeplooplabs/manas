@@ -1,7 +1,7 @@
-"""CLI entry point for HiRAG-Haystack.
+"""CLI entry point for ManasRAG.
 
 This module provides a command-line interface for indexing documents
-and querying the HiRAG knowledge graph.
+and querying the ManasRAG knowledge graph.
 """
 
 import json
@@ -15,9 +15,9 @@ import yaml
 from dotenv import load_dotenv
 from haystack.utils.auth import Secret
 
-from hirag_haystack import HiRAG, QueryParam, RetrievalMode, __version__
-from hirag_haystack.document_loader import DocumentLoader
-from hirag_haystack.stores import EntityVectorStore, ChunkVectorStore
+from manasrag import ManasRAG, QueryParam, RetrievalMode, __version__
+from manasrag.document_loader import DocumentLoader
+from manasrag.stores import EntityVectorStore, ChunkVectorStore
 
 
 # ===== CONFIG FILE HANDLING =====
@@ -26,15 +26,15 @@ def _find_config_file() -> Path | None:
     """Find config file in default locations.
 
     Search order:
-    1. ./hirag.yaml
-    2. ~/.hirag.yaml
+    1. ./manas.yaml
+    2. ~/.manas.yaml
 
     Returns:
         Path to config file if found, None otherwise.
     """
     candidates = [
-        Path("./hirag.yaml"),
-        Path.home() / ".hirag.yaml",
+        Path("./manas.yaml"),
+        Path.home() / ".manas.yaml",
     ]
     for path in candidates:
         if path.exists():
@@ -100,14 +100,14 @@ def _resolve_value(
     return default
 
 
-# ===== HIRAG INSTANCE BUILDER =====
+# ===== MANAS INSTANCE BUILDER =====
 
-class HiRAGConfigError(Exception):
-    """Raised when HiRAG configuration is invalid."""
+class ManasRAGConfigError(Exception):
+    """Raised when ManasRAG configuration is invalid."""
     pass
 
 
-def _build_hirag(
+def _build_manasrag(
     working_dir: str,
     model: str | None,
     api_key: str | None,
@@ -118,8 +118,8 @@ def _build_hirag(
     top_k: int = 20,
     top_m: int = 10,
     verbose: bool = False,
-) -> HiRAG:
-    """Build a HiRAG instance with the given configuration.
+) -> ManasRAG:
+    """Build a ManasRAG instance with the given configuration.
 
     Args:
         working_dir: Working directory for cache and data.
@@ -134,16 +134,16 @@ def _build_hirag(
         verbose: Print progress information.
 
     Returns:
-        Configured HiRAG instance.
+        Configured ManasRAG instance.
 
     Raises:
-        HiRAGConfigError: If API key is missing or OpenAI integration is not installed.
+        ManasRAGConfigError: If API key is missing or OpenAI integration is not installed.
     """
     # Resolve API key from environment if not provided
     api_key = api_key or os.environ.get("OPENAI_API_KEY")
 
     if not api_key:
-        raise HiRAGConfigError(
+        raise ManasRAGConfigError(
             "OpenAI API key not found. Set OPENAI_API_KEY environment variable "
             "or use --api-key flag."
         )
@@ -152,8 +152,8 @@ def _build_hirag(
     try:
         from haystack.components.generators.chat import OpenAIChatGenerator
     except ImportError:
-        raise HiRAGConfigError(
-            "OpenAI integration not installed. Run: pip install haystack-ai[openai]"
+        raise ManasRAGConfigError(
+            "OpenAI integration not installed. Run: pip install manas[openai]"
         )
 
     generator_kwargs: dict[str, Any] = {}
@@ -174,8 +174,8 @@ def _build_hirag(
         working_dir=working_dir,
     )
 
-    # Create HiRAG instance
-    hirag = HiRAG(
+    # Create ManasRAG instance
+    manas = ManasRAG(
         working_dir=working_dir,
         graph_backend=graph_backend,
         generator=generator,
@@ -187,7 +187,7 @@ def _build_hirag(
         chunk_overlap=chunk_overlap,
     )
 
-    return hirag
+    return manas
 
 
 # ===== CLI COMMANDS =====
@@ -197,25 +197,25 @@ def _build_hirag(
     "-d", "--working-dir",
     type=click.Path(),
     default=None,
-    help="Working directory for cache and data (default: ./hirag_cache).",
+    help="Working directory for cache and data (default: ./manas_cache).",
 )
 @click.option(
     "-c", "--config",
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
     default=None,
-    help="Config file path (default: auto-detect hirag.yaml).",
+    help="Config file path (default: auto-detect manas.yaml).",
 )
 @click.option(
     "--verbose/--no-verbose",
     default=False,
     help="Enable verbose output.",
 )
-@click.version_option(version=__version__, prog_name="hirag")
+@click.version_option(version=__version__, prog_name="manas")
 @click.pass_context
 def cli(ctx: click.Context, working_dir: str | None, config: Path | None, verbose: bool) -> None:
-    """HiRAG: Hierarchical Retrieval-Augmented Generation CLI.
+    """ManasRAG: Hierarchical Retrieval-Augmented Generation CLI.
 
-    Index documents and query knowledge graphs using the HiRAG system.
+    Index documents and query knowledge graphs using the ManasRAG system.
     """
     # Load .env file
     load_dotenv()
@@ -229,7 +229,7 @@ def cli(ctx: click.Context, working_dir: str | None, config: Path | None, verbos
     ctx.obj["working_dir"] = _resolve_value(
         working_dir,
         config_data.get("working_dir"),
-        default="./hirag_cache",
+        default="./manas_cache",
     )
     ctx.obj["verbose"] = verbose
 
@@ -310,13 +310,13 @@ def add_documents(
 
     Examples:
 
-        hirag add-documents document.pdf
+        manas add-documents document.pdf
 
-        hirag add-documents "docs/**/*.md" --model gpt-4o
+        manas add-documents "docs/**/*.md" --model gpt-4o
 
-        hirag add-documents https://example.com/page.html
+        manas add-documents https://example.com/page.html
 
-        hirag add-documents file1.txt file2.txt --force-reindex
+        manas add-documents file1.txt file2.txt --force-reindex
     """
     config = ctx.obj["config"]
     index_config = config.get("index", {})
@@ -350,12 +350,12 @@ def add_documents(
 
     click.echo(f"Loaded {len(documents)} document(s)")
 
-    # Build HiRAG instance
+    # Build ManasRAG instance
     if verbose:
-        click.echo(f"Initializing HiRAG (working_dir={working_dir}, model={model})...")
+        click.echo(f"Initializing ManasRAG (working_dir={working_dir}, model={model})...")
 
     try:
-        hirag = _build_hirag(
+        manas = _build_manasrag(
             working_dir=working_dir,
             model=model,
             api_key=api_key,
@@ -365,17 +365,17 @@ def add_documents(
             chunk_overlap=chunk_overlap,
             verbose=verbose,
         )
-    except HiRAGConfigError as e:
+    except ManasRAGConfigError as e:
         raise click.ClickException(str(e))
     except Exception as e:
-        raise click.ClickException(f"Failed to initialize HiRAG: {e}")
+        raise click.ClickException(f"Failed to initialize ManasRAG: {e}")
 
     # Index documents
     if verbose:
         click.echo("Indexing documents...")
 
     try:
-        result = hirag.index(
+        result = manas.index(
             documents=documents,
             project_id=project_id,
             incremental=incremental,
@@ -502,13 +502,13 @@ def query(
 
     Examples:
 
-        hirag query "What are the main themes?"
+        manas query "What are the main themes?"
 
-        hirag query "Summarize the key concepts" --mode hi_global
+        manas query "Summarize the key concepts" --mode hi_global
 
-        echo "What is AI?" | hirag query --stdin
+        echo "What is AI?" | manas query --stdin
 
-        hirag query "List entities" --context-only --json
+        manas query "List entities" --context-only --json
     """
     config = ctx.obj["config"]
     query_config = config.get("query", {})
@@ -540,12 +540,12 @@ def query(
     base_url = _resolve_value(base_url, config.get("base_url"), env_var="OPENAI_BASE_URL")
     graph_backend = _resolve_value(graph_backend, config.get("graph_backend"), default="networkx")
 
-    # Build HiRAG instance
+    # Build ManasRAG instance
     if verbose:
-        click.echo(f"Initializing HiRAG (working_dir={working_dir})...")
+        click.echo(f"Initializing ManasRAG (working_dir={working_dir})...")
 
     try:
-        hirag = _build_hirag(
+        manas = _build_manasrag(
             working_dir=working_dir,
             model=model,
             api_key=api_key,
@@ -557,10 +557,10 @@ def query(
             top_m=top_m,
             verbose=verbose,
         )
-    except HiRAGConfigError as e:
+    except ManasRAGConfigError as e:
         raise click.ClickException(str(e))
     except Exception as e:
-        raise click.ClickException(f"Failed to initialize HiRAG: {e}")
+        raise click.ClickException(f"Failed to initialize ManasRAG: {e}")
 
     # Build query parameters
     param = QueryParam(
@@ -576,7 +576,7 @@ def query(
 
     # Execute query
     try:
-        result = hirag.query(query=query_text, mode=mode, param=param, project_id=project_id)
+        result = manas.query(query=query_text, mode=mode, param=param, project_id=project_id)
     except Exception as e:
         raise click.ClickException(f"Query failed: {e}")
 
@@ -656,34 +656,34 @@ def serve(
     graph_backend: str | None,
     reload: bool,
 ) -> None:
-    """Start the HiRAG REST API server.
+    """Start the ManasRAG REST API server.
 
-    Provides both native HiRAG endpoints (/api/*) and OpenAI-compatible
+    Provides both native ManasRAG endpoints (/api/*) and OpenAI-compatible
     chat completions (/v1/*) for integration with tools like Open WebUI.
 
     Examples:
 
-        hirag serve
+        manas serve
 
-        hirag serve --port 8080 --model gpt-4o
+        manas serve --port 8080 --model gpt-4o
 
-        hirag serve --reload  # Development mode with auto-reload
+        manas serve --reload  # Development mode with auto-reload
 
-    Config file support (hirag.yaml):
+    Config file support (manas.yaml):
 
         server:
           host: "0.0.0.0"
           port: 8000
 
     Environment variables:
-        HIRAG_HOST, HIRAG_PORT
+        MANAS_HOST, MANAS_PORT
     """
     # Check for uvicorn
     try:
         import uvicorn
     except ImportError:
         raise click.ClickException(
-            "API dependencies not installed. Run: pip install hirag-haystack[api]"
+            "API dependencies not installed. Run: pip install manas[api]"
         )
 
     config = ctx.obj["config"]
@@ -692,8 +692,8 @@ def serve(
 
     # Resolve configuration values
     working_dir = ctx.obj["working_dir"]
-    host = _resolve_value(host, server_config.get("host"), env_var="HIRAG_HOST", default="0.0.0.0")
-    port = _resolve_value(port, server_config.get("port"), env_var="HIRAG_PORT", default=8000)
+    host = _resolve_value(host, server_config.get("host"), env_var="MANAS_HOST", default="0.0.0.0")
+    port = _resolve_value(port, server_config.get("port"), env_var="MANAS_PORT", default=8000)
     model = _resolve_value(model, config.get("model"), default="gpt-4o-mini")
     api_key = _resolve_value(api_key, config.get("api_key"), env_var="OPENAI_API_KEY")
     base_url = _resolve_value(base_url, config.get("base_url"), env_var="OPENAI_BASE_URL")
@@ -704,7 +704,7 @@ def serve(
         port = int(port)
 
     # Print startup info
-    click.echo("Starting HiRAG API server...")
+    click.echo("Starting ManasRAG API server...")
     click.echo(f"  Working directory: {working_dir}")
     click.echo(f"  Model: {model}")
     click.echo(f"  Graph backend: {graph_backend}")
@@ -718,7 +718,7 @@ def serve(
     click.echo()
 
     # Import and configure the app
-    from hirag_haystack.api import AppConfig, create_app
+    from manasrag.api import AppConfig, create_app
 
     app_config = AppConfig(
         working_dir=working_dir,
@@ -735,16 +735,16 @@ def serve(
         click.echo("Note: Config changes require restart.")
 
         # Store config in environment for the reloaded process
-        os.environ["_HIRAG_WORKING_DIR"] = working_dir
-        os.environ["_HIRAG_MODEL"] = model or ""
-        os.environ["_HIRAG_GRAPH_BACKEND"] = graph_backend
+        os.environ["_MANAS_WORKING_DIR"] = working_dir
+        os.environ["_MANAS_MODEL"] = model or ""
+        os.environ["_MANAS_GRAPH_BACKEND"] = graph_backend
         if api_key:
             os.environ["OPENAI_API_KEY"] = api_key
         if base_url:
             os.environ["OPENAI_BASE_URL"] = base_url
 
         uvicorn.run(
-            "hirag_haystack.api.app:_create_dev_app",
+            "manasrag.api.app:_create_dev_app",
             host=host,
             port=port,
             reload=True,
@@ -765,21 +765,21 @@ def serve(
     help="Output format (default: yaml).",
 )
 def default_config(format: str) -> None:
-    """Output the default configuration for HiRAG.
+    """Output the default configuration for ManasRAG.
 
     This command prints a complete configuration file that can be
     saved and customized for your setup.
 
     Examples:
 
-        hirag default-config > hirag.yaml
+        manas default-config > manas.yaml
 
-        hirag default-config --format json
+        manas default-config --format json
 
-        hirag default-config --format env > .env.example
+        manas default-config --format env > .env.example
     """
     config = {
-        "working_dir": "./hirag_cache",
+        "working_dir": "./manas_cache",
         "model": "gpt-4o-mini",
         "api_key": "YOUR_API_KEY_HERE",
         "base_url": None,  # Optional, for custom endpoints
@@ -804,9 +804,9 @@ def default_config(format: str) -> None:
     env_vars = [
         ("OPENAI_API_KEY", "Your OpenAI API key"),
         ("OPENAI_BASE_URL", "Optional: Custom API endpoint base URL"),
-        ("HIRAG_WORKING_DIR", "Working directory (default: ./hirag_cache)"),
-        ("HIRAG_HOST", "Server bind host (default: 0.0.0.0)"),
-        ("HIRAG_PORT", "Server bind port (default: 8000)"),
+        ("MANAS_WORKING_DIR", "Working directory (default: ./manas_cache)"),
+        ("MANAS_HOST", "Server bind host (default: 0.0.0.0)"),
+        ("MANAS_PORT", "Server bind port (default: 8000)"),
     ]
 
     if format == "json":
@@ -816,18 +816,18 @@ def default_config(format: str) -> None:
             click.echo(f"# {desc}")
             if var == "OPENAI_API_KEY":
                 click.echo(f"{var}=your_api_key_here")
-            elif var == "HIRAG_PORT":
+            elif var == "MANAS_PORT":
                 click.echo(f"{var}=8000")
             else:
                 click.echo(f"# {var}=")
             click.echo()
     else:
         # YAML format with comments
-        output = """# HiRAG Configuration File
-# Copy this to hirag.yaml or ~/.hirag.yaml
+        output = """# ManasRAG Configuration File
+# Copy this to manas.yaml or ~/.manas.yaml
 
 # Working directory for cache and data
-working_dir: ./hirag_cache
+working_dir: ./manas_cache
 
 # LLM model (see https://platform.openai.com/docs/models)
 model: gpt-4o-mini

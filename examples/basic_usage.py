@@ -1,7 +1,7 @@
-"""Basic usage example for HiRAG-Haystack.
+"""Basic usage example for ManasRAG.
 
 This example demonstrates:
-1. Setting up HiRAG with OpenAI
+1. Setting up ManasRAG with OpenAI
 2. Indexing documents
 3. Querying with different retrieval modes
 """
@@ -16,12 +16,12 @@ from haystack.components.embedders import OpenAITextEmbedder
 
 from haystack.dataclasses import Document
 
-from hirag_haystack import HiRAG, QueryParam
-from hirag_haystack.stores import EntityVectorStore, ChunkVectorStore
+from manasrag import ManasRAG, QueryParam
+from manasrag.stores import EntityVectorStore, ChunkVectorStore
 
 
 def main():
-    """Run basic HiRAG example."""
+    """Run basic ManasRAG example."""
 
     # Load environment variables from .env file
     load_dotenv()
@@ -51,12 +51,12 @@ def main():
         print(f"API base URL: {base_url}")
 
     # Set up stores
-    chunk_store = ChunkVectorStore(working_dir="./hirag_data")
-    entity_store = EntityVectorStore(working_dir="./hirag_data")
+    chunk_store = ChunkVectorStore(working_dir="./manas_data")
+    entity_store = EntityVectorStore(working_dir="./manas_data")
 
-    # Initialize HiRAG
-    hirag = HiRAG(
-        working_dir="./hirag_data",
+    # Initialize ManasRAG
+    manas = ManasRAG(
+        working_dir="./manas_data",
         generator=generator,
         entity_store=entity_store,
         chunk_store=chunk_store,
@@ -93,12 +93,12 @@ def main():
 
     Knowledge graphs represent information as a network of entities and their
     relationships. They are used in various applications including search engines,
-    recommendation systems, and AI reasoning. GraphRAG and HiRAG are approaches
+    recommendation systems, and AI reasoning. GraphRAG and ManasRAG are approaches
     that combine knowledge graphs with retrieval-augmented generation.
     """
 
     print("Indexing documents...")
-    result = hirag.index([Document(content=documents)])
+    result = manas.index([Document(content=documents)])
     print(f"Indexed: {result}")
 
     # Query examples with different modes
@@ -117,7 +117,7 @@ def main():
         print(f"\n--- Mode: {mode} ---")
         print(f"Query: {query}")
 
-        result = hirag.query(query, mode=mode)
+        result = manas.query(query, mode=mode)
         print(f"Answer: {result['answer'][:300]}...")
 
     # Query with custom parameters
@@ -132,7 +132,7 @@ def main():
         response_type="Single Paragraph",
     )
 
-    result = hirag.query(
+    result = manas.query(
         "What are the key concepts in AI?",
         param=param,
     )
