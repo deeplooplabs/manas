@@ -688,7 +688,7 @@ def serve(
         port = int(port)
 
     # Print startup info
-    click.echo(f"Starting HiRAG API server...")
+    click.echo("Starting HiRAG API server...")
     click.echo(f"  Working directory: {working_dir}")
     click.echo(f"  Model: {model}")
     click.echo(f"  Graph backend: {graph_backend}")
@@ -739,6 +739,120 @@ def serve(
         # Create app directly
         app = create_app(config=app_config)
         uvicorn.run(app, host=host, port=port)
+
+
+@cli.command()
+@click.option(
+    "--format",
+    type=click.Choice(["yaml", "json", "env"]),
+    default="yaml",
+    help="Output format (default: yaml).",
+)
+def default_config(format: str) -> None:
+    """Output the default configuration for HiRAG.
+
+    This command prints a complete configuration file that can be
+    saved and customized for your setup.
+
+    Examples:
+
+        hirag default-config > hirag.yaml
+
+        hirag default-config --format json
+
+        hirag default-config --format env > .env.example
+    """
+    config = {
+        "working_dir": "./hirag_cache",
+        "model": "gpt-4o-mini",
+        "api_key": "YOUR_API_KEY_HERE",
+        "base_url": None,  # Optional, for custom endpoints
+        "graph_backend": "networkx",
+        "index": {
+            "chunk_size": 1200,
+            "chunk_overlap": 100,
+            "incremental": True,
+        },
+        "query": {
+            "mode": "hi",
+            "top_k": 20,
+            "top_m": 10,
+            "response_type": "Multiple Paragraphs",
+        },
+        "server": {
+            "host": "0.0.0.0",
+            "port": 8000,
+        },
+    }
+
+    env_vars = [
+        ("OPENAI_API_KEY", "Your OpenAI API key"),
+        ("OPENAI_BASE_URL", "Optional: Custom API endpoint base URL"),
+        ("HIRAG_WORKING_DIR", "Working directory (default: ./hirag_cache)"),
+        ("HIRAG_HOST", "Server bind host (default: 0.0.0.0)"),
+        ("HIRAG_PORT", "Server bind port (default: 8000)"),
+    ]
+
+    if format == "json":
+        click.echo(json.dumps(config, indent=2))
+    elif format == "env":
+        for var, desc in env_vars:
+            click.echo(f"# {desc}")
+            if var == "OPENAI_API_KEY":
+                click.echo(f"{var}=your_api_key_here")
+            elif var == "HIRAG_PORT":
+                click.echo(f"{var}=8000")
+            else:
+                click.echo(f"# {var}=")
+            click.echo()
+    else:
+        # YAML format with comments
+        output = """# HiRAG Configuration File
+# Copy this to hirag.yaml or ~/.hirag.yaml
+
+# Working directory for cache and data
+working_dir: ./hirag_cache
+
+# LLM model (see https://platform.openai.com/docs/models)
+model: gpt-4o-mini
+
+# OpenAI API key (can also use OPENAI_API_KEY env var)
+# api_key: sk-...
+
+# Optional: Custom API endpoint base URL
+# base_url: https://api.openai.com/v1
+
+# Graph backend: networkx (in-memory) or neo4j (production)
+graph_backend: networkx
+
+# Indexing configuration
+index:
+  # Token chunk size for document splitting
+  chunk_size: 1200
+  # Overlap between chunks
+  chunk_overlap: 100
+  # Skip already-indexed documents
+  incremental: true
+
+# Query configuration
+query:
+  # Retrieval mode: naive, hi_local, hi_global, hi_bridge, hi_nobridge, hi
+  mode: hi
+  # Number of entities to retrieve
+  top_k: 20
+  # Key entities per community for path finding
+  top_m: 10
+  # Response format
+  response_type: Multiple Paragraphs
+
+# REST API server configuration
+server:
+  # Bind address
+  host: 0.0.0.0
+  # Bind port
+  port: 8000
+"""
+        click.echo(output)
 
 
 def main() -> None:
