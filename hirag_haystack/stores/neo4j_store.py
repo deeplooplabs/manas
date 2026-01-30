@@ -235,6 +235,90 @@ class Neo4jGraphStore(GraphDocumentStore):
         tgt_degree = self.node_degree(tgt_id)
         return src_degree + tgt_degree
 
+    # ===== Delete Operations =====
+
+    def delete_node(self, node_id: str) -> None:
+        """Delete a node and all its edges from the graph."""
+        self._execute_query(
+            "MATCH (e:Entity {name: $name}) DETACH DELETE e",
+            {"name": node_id},
+        )
+
+    def delete_edge(self, src_id: str, tgt_id: str) -> None:
+        """Delete an edge between two nodes."""
+        self._execute_query(
+            """
+            MATCH (s:Entity {name: $src})-[r]-(t:Entity {name: $tgt})
+            DELETE r
+            """,
+            {"src": src_id, "tgt": tgt_id},
+        )
+
+    def get_all_edges(self) -> list[tuple[str, str]]:
+        """Get all edges in the graph."""
+        result = self._execute_query(
+            """
+            MATCH (s:Entity)-[r]->(t:Entity)
+            RETURN s.name as src, t.name as tgt
+            """
+        )
+        return [(record["src"], record["tgt"]) for record in result]
+
+    def remove_source_from_node(self, node_id: str, source_id: str) -> bool:
+        """Remove a source_id reference from a node.
+
+        Returns True if the node was deleted (no remaining sources).
+        """
+        node = self.get_node(node_id)
+        if not node:
+            return False
+
+        current_sources = set(node.get("source_id", "").split("|"))
+        current_sources.discard(source_id)
+        current_sources.discard("")
+
+        if not current_sources:
+            self.delete_node(node_id)
+            return True
+
+        self._execute_query(
+            "MATCH (e:Entity {name: $name}) SET e.source_id = $source_id",
+            {"name": node_id, "source_id": "|".join(current_sources)},
+        )
+        return False
+
+    def remove_source_from_edge(
+        self, src_id: str, tgt_id: str, source_id: str
+    ) -> bool:
+        """Remove a source_id reference from an edge.
+
+        Returns True if the edge was deleted (no remaining sources).
+        """
+        edge = self.get_edge(src_id, tgt_id)
+        if not edge:
+            return False
+
+        current_sources = set(edge.get("source_id", "").split("|"))
+        current_sources.discard(source_id)
+        current_sources.discard("")
+
+        if not current_sources:
+            self.delete_edge(src_id, tgt_id)
+            return True
+
+        self._execute_query(
+            """
+            MATCH (s:Entity {name: $src})-[r]-(t:Entity {name: $tgt})
+            SET r.source_id = $source_id
+            """,
+            {
+                "src": src_id,
+                "tgt": tgt_id,
+                "source_id": "|".join(current_sources),
+            },
+        )
+        return False
+
     # ===== Community Operations =====
 
     def clustering(self, algorithm: str = "leiden") -> dict[str, Community]:

@@ -153,6 +153,66 @@ class NetworkXGraphStore(GraphDocumentStore):
         # Return sum of node degrees as edge importance
         return self.node_degree(src_id) + self.node_degree(tgt_id)
 
+    # ===== Delete Operations =====
+
+    def delete_node(self, node_id: str) -> None:
+        """Delete a node and all its edges from the graph."""
+        if self.has_node(node_id):
+            self._graph.remove_node(node_id)
+
+    def delete_edge(self, src_id: str, tgt_id: str) -> None:
+        """Delete an edge between two nodes."""
+        if self.has_edge(src_id, tgt_id):
+            self._graph.remove_edge(src_id, tgt_id)
+
+    def get_all_edges(self) -> list[tuple[str, str]]:
+        """Get all edges in the graph."""
+        return [(str(u), str(v)) for u, v in self._graph.edges()]
+
+    def remove_source_from_node(self, node_id: str, source_id: str) -> bool:
+        """Remove a source_id reference from a node.
+
+        Returns True if the node was deleted (no remaining sources).
+        """
+        if not self.has_node(node_id):
+            return False
+
+        node_data = dict(self._graph.nodes[node_id])
+        current_sources = set(node_data.get("source_id", "").split("|"))
+        current_sources.discard(source_id)
+        current_sources.discard("")
+
+        if not current_sources:
+            self._graph.remove_node(node_id)
+            return True
+
+        node_data["source_id"] = "|".join(current_sources)
+        nx.set_node_attributes(self._graph, {node_id: node_data})
+        return False
+
+    def remove_source_from_edge(
+        self, src_id: str, tgt_id: str, source_id: str
+    ) -> bool:
+        """Remove a source_id reference from an edge.
+
+        Returns True if the edge was deleted (no remaining sources).
+        """
+        if not self.has_edge(src_id, tgt_id):
+            return False
+
+        edge_data = dict(self._graph.edges[src_id, tgt_id])
+        current_sources = set(edge_data.get("source_id", "").split("|"))
+        current_sources.discard(source_id)
+        current_sources.discard("")
+
+        if not current_sources:
+            self._graph.remove_edge(src_id, tgt_id)
+            return True
+
+        edge_data["source_id"] = "|".join(current_sources)
+        nx.set_edge_attributes(self._graph, {(src_id, tgt_id): edge_data})
+        return False
+
     # ===== Community Operations =====
 
     def clustering(self, algorithm: str = "louvain") -> dict[str, Community]:

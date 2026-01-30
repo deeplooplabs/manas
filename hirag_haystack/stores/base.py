@@ -209,6 +209,69 @@ class GraphDocumentStore(ABC):
         """
         raise NotImplementedError
 
+    # ===== Delete Operations =====
+
+    @abstractmethod
+    def delete_node(self, node_id: str) -> None:
+        """Delete a node and all its edges from the graph.
+
+        Args:
+            node_id: The entity name to delete.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def delete_edge(self, src_id: str, tgt_id: str) -> None:
+        """Delete an edge between two nodes.
+
+        Args:
+            src_id: Source entity name.
+            tgt_id: Target entity name.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_all_edges(self) -> list[tuple[str, str]]:
+        """Get all edges in the graph.
+
+        Returns:
+            List of (source, target) tuples.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def remove_source_from_node(self, node_id: str, source_id: str) -> bool:
+        """Remove a source_id reference from a node.
+
+        If the node has no remaining sources, it should be deleted.
+
+        Args:
+            node_id: The entity name.
+            source_id: The chunk source_id to remove.
+
+        Returns:
+            True if the node was deleted (no remaining sources), False otherwise.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def remove_source_from_edge(
+        self, src_id: str, tgt_id: str, source_id: str
+    ) -> bool:
+        """Remove a source_id reference from an edge.
+
+        If the edge has no remaining sources, it should be deleted.
+
+        Args:
+            src_id: Source entity name.
+            tgt_id: Target entity name.
+            source_id: The chunk source_id to remove.
+
+        Returns:
+            True if the edge was deleted (no remaining sources), False otherwise.
+        """
+        raise NotImplementedError
+
     # ===== Utility Methods =====
 
     def index_start_callback(self) -> None:

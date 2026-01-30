@@ -1,147 +1,83 @@
-# HiRAG-Haystack
+# CLAUDE.md
 
-This is a Haystack-based implementation of HiRAG (Hierarchical Retrieval-Augmented Generation).
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Project Overview
 
-HiRAG is a hierarchical knowledge retrieval system that:
+HiRAG-Haystack implements the [HiRAG paper](https://arxiv.org/abs/2503.10150) (Hierarchical Retrieval-Augmented Generation) using the [Haystack](https://docs.haystack.deepset.ai/) framework. It builds knowledge graphs from documents via LLM entity extraction, detects communities with Louvain/Leiden clustering, generates community reports, and supports multiple retrieval modes.
 
-- Builds knowledge graphs from documents using entity/relationship extraction
-- Detects communities within the graph using Louvain clustering
-- Generates community reports for global context
-- Supports multiple retrieval modes (naive, local, global, bridge, nobridge)
-- Enables cross-community reasoning through path finding
+## Commands
 
-## Project Structure
+```bash
+# Install dependencies
+uv sync
 
-```
-hirag_haystack/
-├── __init__.py           # High-level HiRAG API
-├── prompts.py            # LLM prompt templates
-├── core/
-│   ├── graph.py          # Entity, Relation data classes
-│   ├── community.py      # Community, CommunitySchema data classes
-│   └── query_param.py    # QueryParam, RetrievalMode
-├── stores/
-│   ├── base.py           # GraphDocumentStore abstract base
-│   ├── networkx_store.py # NetworkX implementation (in-memory)
-│   ├── neo4j_store.py    # Neo4j implementation (production)
-│   └── vector_store.py   # EntityVectorStore, ChunkVectorStore, KVStore
-├── components/
-│   ├── entity_extractor.py        # Entity/relation extraction
-│   ├── hierarchical_entity_extractor.py  # Two-stage hierarchical extraction
-│   ├── community_detector.py      # Louvain community detection
-│   ├── report_generator.py        # Community report generation
-│   ├── hierarchical_retriever.py  # Multi-mode retrieval
-│   └── path_finder.py             # Cross-community path finding
-├── pipelines/
-│   ├── indexing.py       # Document indexing pipeline
-│   └── query.py          # Query pipeline
-└── utils/
-    └── token_utils.py    # tiktoken utilities
+# Run examples
+uv run python examples/basic_usage.py
 
-examples/
-├── basic_usage.py        # Simple indexing and query
-└── advanced_queries.py   # All retrieval modes
+# Lint
+ruff check hirag_haystack/
 
-docs/
-├── design.md             # Detailed design document
-└── implementation.md     # Implementation plan
+# Format
+ruff format hirag_haystack/
+
+# Run tests (test files are in the project root, not tests/)
+uv run pytest test_*.py
 ```
 
-## Key Concepts
+Note: `pyproject.toml` declares `testpaths = ["tests"]` but no `tests/` directory exists. Test files live in the project root as `test_*.py`.
+
+## Architecture
+
+### Layer Overview
+
+```
+HiRAG (facade)  →  Pipelines  →  Components  →  Stores
+  __init__.py       pipelines/     components/     stores/
+```
+
+- **`HiRAG`** (`__init__.py`): Facade class — the main user-facing API. Wires together stores, components, and pipelines. All public methods (`index()`, `query()`, `query_local()`, etc.) delegate to pipelines.
+- **Pipelines** (`pipelines/`): `HiRAGIndexingPipeline` and `HiRAGQueryPipeline` orchestrate Haystack components into end-to-end workflows.
+- **Components** (`components/`): Haystack `@component`-decorated classes with `run()` methods returning dicts. Each component does one job (extract entities, detect communities, retrieve, build context, etc.).
+- **Stores** (`stores/`): Storage backends. `GraphDocumentStore` is the ABC; `NetworkXGraphStore` (in-memory) and `Neo4jGraphStore` (production, optional import) implement it. `EntityVectorStore`, `ChunkVectorStore`, and `KVStore` handle embeddings and metadata.
+- **Core** (`core/`): Pure data structures — `Entity`, `Relation`, `NodeType` enum, `Community`, `QueryParam`, `RetrievalMode` enum. No business logic.
+
+### Data Flow
+
+**Indexing:** Documents → `DocumentSplitter` (token-based chunking) → `EntityExtractor` (LLM with multi-pass gleaning) → `GraphIndexer` (upsert to graph store) → `CommunityDetector` (Louvain level 0, then optional hierarchical clustering with sklearn) → `CommunityReportGenerator` (LLM summaries) → vector stores
+
+**Query:** Query → `EntityRetriever` (semantic search on entity embeddings) → `HierarchicalRetriever` (mode-specific: local entities, global community reports, bridge cross-community paths) → `ContextBuilder` (assemble hierarchical context) → `PromptBuilder` → `ChatGenerator` → answer
 
 ### Retrieval Modes
 
-| Mode          | Description                                 |
-| ------------- | ------------------------------------------- |
-| `naive`       | Simple chunk-based retrieval                |
-| `hi_local`    | Entity-level retrieval only                 |
-| `hi_global`   | Community report retrieval only             |
-| `hi_bridge`   | Cross-community path finding                |
-| `hi_nobridge` | Local + global without paths                |
-| `hi`          | Full hierarchical (local + global + bridge) |
+| Mode | What it retrieves |
+|------|-------------------|
+| `naive` | Document chunks only |
+| `hi_local` | Entities + relations + chunks |
+| `hi_global` | Community reports + chunks |
+| `hi_bridge` | Cross-community reasoning paths |
+| `hi_nobridge` | Local + global combined (no paths) |
+| `hi` | All: local + global + bridge |
 
-### Storage Backends
+### Storage Abstraction
 
-- **NetworkXGraphStore**: In-memory, uses `python-louvain` for clustering
-- **Neo4jGraphStore**: Production, uses Cypher queries and GDS library
+`GraphDocumentStore` ABC defines the interface: node CRUD (`has_node`, `get_node`, `upsert_node`, `node_degree`, `get_node_edges`), edge CRUD, community operations (`clustering`, `community_schema`), and path operations (`shortest_path`, `subgraph_edges`). Both NetworkX and Neo4j backends implement this interface.
 
-### Vector Stores
+## Conventions
 
-- **EntityVectorStore**: Stores entity embeddings for semantic search
-- **ChunkVectorStore**: Stores document chunks for retrieval
-- **KVStore**: Key-value store for metadata
+- **Haystack components**: Use `@component` decorator, declare outputs with `@component.output_types(...)`, return dicts from `run()` methods
+- **Types**: Python 3.10+ union syntax (`X | None`), `@dataclass` for data classes, `TypedDict` for typed dicts
+- **Naming**: `PascalCase` classes, `snake_case` functions, `_prefix` private attrs, `UPPER_SNAKE_CASE` constants grouped with `# ===== NAME =====` headers
+- **Imports**: `flake8: noqa` in `__init__.py` files; grouped stdlib → third-party → local
+- **Neo4j**: Optional import with try/except in `stores/__init__.py`; lazy import in `HiRAG.__init__`
+- **Ruff**: line-length 100, target Python 3.10
 
-## High-Level API Usage
+## Environment
 
-```python
-from hirag_haystack import HiRAG
-
-# Initialize
-hirag = HiRAG(working_dir="./hirag_cache")
-
-# Index documents
-hirag.index("path/to/document.txt")
-
-# Query (default: hi mode)
-result = hirag.query("What are the main themes?")
-print(result["answer"])
-
-# Incremental indexing
-hirag.index(new_docs, incremental=True)
-
-# Different retrieval modes
-hirag.query_local(query)    # Entity-level only
-hirag.query_global(query)   # Community reports only
-hirag.query_nobridge(query) # Combined without paths
-```
+Requires `OPENAI_API_KEY` (or compatible) in `.env` file. Optional `OPENAI_BASE_URL` for custom endpoints. See `.env.example`.
 
 ## Dependencies
 
-- `haystack-ai>=2.6`: Core framework
-- `networkx`: Graph data structure
-- `python-louvain`: Community detection
-- `tiktoken`: Token counting
+Core: `haystack-ai>=2.6`, `networkx`, `python-louvain`, `tiktoken`, `python-dotenv`
 
-Optional:
-
-- `neo4j>=5.0`: Neo4j backend
-- `openai>=1.0`: OpenAI LLMs
-- `scikit-learn`: Hierarchical clustering
-
-## Dependency Management (uv)
-
-This project uses `uv` as the dependency management tool.
-
-### Installation
-
-```bash
-# Install dependencies with uv
-uv sync
-
-# Run scripts with uv
-uv run python examples/basic_usage.py
-uv run python examples/visualizations.py
-uv run pytest tests/
-```
-
-### Why uv?
-
-- Fast dependency resolution and installation
-- Compatible with pip and PyPI
-- Better lock file support (uv.lock)
-- Virtual environment management built-in
-
-## Implementation Notes
-
-1. **Gleaning**: Entity extraction uses a multi-pass approach to catch missed entities
-2. **Incremental updates**: Documents are deduplicated by MD5 hash
-3. **Path finding**: Uses shortest path algorithms for cross-community reasoning
-4. **Hierarchical clustering**: AgglomerativeClustering when scikit-learn is available
-
-## Testing
-
-```bash
-pytest tests/
-```
+Optional groups: `openai`, `neo4j`, `scikit-learn` (hierarchical clustering), `visualization` (pyvis, plotly), `dev` (pytest), `all`
