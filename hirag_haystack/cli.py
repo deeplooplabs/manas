@@ -302,13 +302,13 @@ def add_documents(
 
     Examples:
 
-        hirag add-document document.pdf
+        hirag add-documents document.pdf
 
-        hirag add-document "docs/**/*.md" --model gpt-4o
+        hirag add-documents "docs/**/*.md" --model gpt-4o
 
-        hirag add-document https://example.com/page.html
+        hirag add-documents https://example.com/page.html
 
-        hirag add-document file1.txt file2.txt --force-reindex
+        hirag add-documents file1.txt file2.txt --force-reindex
     """
     config = ctx.obj["config"]
     index_config = config.get("index", {})
