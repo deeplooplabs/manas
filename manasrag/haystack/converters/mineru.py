@@ -153,8 +153,8 @@ class MinerUToDocument:
         Returns:
             A Document object or None if parsing failed.
         """
-        source_name = getattr(stream, "source_url", "stream") or "stream"
-        pdf_bytes = stream.to_bytes()
+        source_name = getattr(stream, "source_url", None) or "stream"
+        pdf_bytes = stream.data
         return self._parse_bytes(pdf_bytes, source_name, metadata)
 
     def _parse_bytes(
