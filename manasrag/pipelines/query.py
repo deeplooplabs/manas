@@ -9,7 +9,10 @@ This module implements the query pipeline that:
 import time
 from typing import Any
 
+from typing import Any
+
 from haystack import Pipeline, component
+from haystack.dataclasses import ChatMessage
 
 from manasrag._logging import get_logger
 from manasrag.core.query_param import QueryParam
@@ -142,7 +145,7 @@ class ManasRAGQueryPipeline:
         graph_store: GraphDocumentStore,
         entity_store: Any = None,
         chunk_store: Any = None,
-        generator: Any = None,
+        generator: BaseGenerator | None = None,
         default_mode: str = "hi",
         top_k: int = 20,
         top_m: int = 10,
@@ -279,7 +282,7 @@ class ManasRAGQueryPipeline:
         self._logger.debug(f"Generating answer (prompt_len={len(prompt)})")
         start_time = time.time()
 
-        response = self.generator.run(prompt=prompt)
+        response = self.generator.run(messages=[ChatMessage.from_user(prompt)])
 
         # Debug logging
         self._logger.debug(f"Response type: {type(response).__name__}")
@@ -335,7 +338,7 @@ def build_query_pipeline(
     graph_store: GraphDocumentStore,
     entity_store: Any = None,
     chunk_store: Any = None,
-    generator: Any = None,
+    generator: BaseGenerator | None = None,
 ) -> Pipeline:
     """Build a Haystack Pipeline for ManasRAG querying.
 

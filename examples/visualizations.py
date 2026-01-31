@@ -14,7 +14,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from haystack.components.generators import OpenAIGenerator
+from haystack.components.generators.chat import OpenAIChatGenerator
 
 from manasrag import ManasRAG
 from manasrag.components import GraphVisualizer
@@ -263,7 +263,7 @@ def main():
     print("If no data is found, please run: python examples/basic_usage.py\n")
 
     # Check for existing data
-    if not Path("./hirag_data").exists():
+    if not Path("./manas_data").exists():
         print("[!] No HiRAG data found!")
         print("Please run basic_usage.py first to create sample data.")
         print("\nYou can also use your own data by setting working_dir parameter.")

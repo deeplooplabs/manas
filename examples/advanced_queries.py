@@ -10,7 +10,7 @@ import os
 
 from dotenv import load_dotenv
 
-from haystack.components.generators import OpenAIGenerator
+from haystack.components.generators.chat import OpenAIChatGenerator
 from haystack.document_stores.in_memory import InMemoryDocumentStore
 
 from haystack.dataclasses import Document
@@ -35,16 +35,16 @@ def main():
 
     # Initialize generator with custom base URL if provided
     if base_url:
-        generator = OpenAIGenerator(model=model, api_base_url=base_url, timeout=120.0)
+        generator = OpenAIChatGenerator(model=model, api_base_url=base_url, timeout=120.0)
     else:
-        generator = OpenAIGenerator(model=model, timeout=120.0)
+        generator = OpenAIChatGenerator(model=model, timeout=120.0)
 
     # Set up stores for entity and chunk retrieval
-    chunk_store = ChunkVectorStore(working_dir="./hirag_data")
-    entity_store = EntityVectorStore(working_dir="./hirag_data")
+    chunk_store = ChunkVectorStore(working_dir="./manas_data")
+    entity_store = EntityVectorStore(working_dir="./manas_data")
 
     hirag = ManasRAG(
-        working_dir="./hirag_data",
+        working_dir="./manas_data",
         generator=generator,
         entity_store=entity_store,
         chunk_store=chunk_store,

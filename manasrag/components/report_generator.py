@@ -8,6 +8,7 @@ import json
 from typing import Any
 
 from haystack import component
+from haystack.dataclasses import ChatMessage
 
 from manasrag._logging import get_logger
 from manasrag.core.community import Community
@@ -26,7 +27,7 @@ class CommunityReportGenerator:
 
     def __init__(
         self,
-        generator: Any = None,
+        generator: Any | None = None,
         max_tokens: int = 2000,
     ):
         """Initialize the CommunityReportGenerator.
@@ -173,7 +174,7 @@ class CommunityReportGenerator:
             raise ValueError("Generator not configured.")
 
         self._logger.debug(f"Calling LLM (prompt_len={len(prompt)})")
-        response = self.generator.run(prompt=prompt)
+        response = self.generator.run(messages=[ChatMessage.from_user(prompt)])
 
         # Extract text from response - handle various Haystack response formats
         if isinstance(response, dict):

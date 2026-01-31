@@ -10,7 +10,7 @@ import os
 
 from dotenv import load_dotenv
 
-from haystack.components.generators import OpenAIGenerator
+from haystack.components.generators.chat import OpenAIChatGenerator
 from haystack.utils.auth import Secret
 from haystack.components.embedders import OpenAITextEmbedder
 
@@ -42,9 +42,9 @@ def main():
 
     # Initialize components
     if base_url:
-        generator = OpenAIGenerator(api_key=Secret.from_token(api_key), model=model, api_base_url=base_url, timeout=120.0)
+        generator = OpenAIChatGenerator(api_key=Secret.from_token(api_key), model=model, api_base_url=base_url, timeout=120.0)
     else:
-        generator = OpenAIGenerator(api_key=Secret.from_token(api_key), model=model, timeout=120.0)
+        generator = OpenAIChatGenerator(api_key=Secret.from_token(api_key), model=model, timeout=120.0)
 
     print(f"Using model: {model}")
     if base_url:
