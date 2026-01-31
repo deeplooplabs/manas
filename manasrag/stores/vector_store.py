@@ -183,9 +183,11 @@ class EntityVectorStore:
                 self._entity_index.pop(name, None)
 
     def _load_from_disk(self) -> None:
-        """Load index from disk."""
+        """Load index and documents from disk."""
         index_path = Path(self.working_dir) / "entity_index.json"
+        docs_path = Path(self.working_dir) / "entity_documents.json"
 
+        # Load entity index
         if index_path.exists():
             try:
                 with open(index_path, "r") as f:
@@ -193,14 +195,36 @@ class EntityVectorStore:
             except (json.JSONDecodeError, IOError):
                 self._entity_index = {}
 
+        # Load documents from _store
+        if docs_path.exists():
+            try:
+                with open(docs_path, "r") as f:
+                    docs_data = json.load(f)
+                    # Reconstruct documents
+                    docs = []
+                    for doc_data in docs_data:
+                        from haystack.dataclasses import Document
+                        docs.append(Document(id=doc_data["id"], content=doc_data["content"], meta=doc_data.get("meta", {})))
+                    if docs:
+                        self._store.write_documents(docs)
+            except (json.JSONDecodeError, IOError, ImportError):
+                pass
+
     def save_to_disk(self) -> None:
-        """Save index to disk."""
+        """Save index and documents to disk."""
         Path(self.working_dir).mkdir(parents=True, exist_ok=True)
 
+        # Save entity index
         index_path = Path(self.working_dir) / "entity_index.json"
-
         with open(index_path, "w") as f:
             json.dump(self._entity_index, f)
+
+        # Save documents from _store
+        docs_path = Path(self.working_dir) / "entity_documents.json"
+        docs = self._store.filter_documents({})
+        docs_data = [{"id": doc.id, "content": doc.content, "meta": doc.meta} for doc in docs]
+        with open(docs_path, "w") as f:
+            json.dump(docs_data, f)
 
     @property
     def count(self) -> int:
@@ -364,9 +388,11 @@ class ChunkVectorStore:
             self._chunk_index.pop(chunk_id, None)
 
     def _load_from_disk(self) -> None:
-        """Load index from disk."""
+        """Load index and documents from disk."""
         index_path = Path(self.working_dir) / "chunk_index.json"
+        docs_path = Path(self.working_dir) / "chunk_documents.json"
 
+        # Load chunk index
         if index_path.exists():
             try:
                 with open(index_path, "r") as f:
@@ -374,14 +400,36 @@ class ChunkVectorStore:
             except (json.JSONDecodeError, IOError):
                 self._chunk_index = {}
 
+        # Load documents from _store
+        if docs_path.exists():
+            try:
+                with open(docs_path, "r") as f:
+                    docs_data = json.load(f)
+                    # Reconstruct documents
+                    docs = []
+                    for doc_data in docs_data:
+                        from haystack.dataclasses import Document
+                        docs.append(Document(id=doc_data["id"], content=doc_data["content"], meta=doc_data.get("meta", {})))
+                    if docs:
+                        self._store.write_documents(docs)
+            except (json.JSONDecodeError, IOError, ImportError):
+                pass
+
     def save_to_disk(self) -> None:
-        """Save index to disk."""
+        """Save index and documents to disk."""
         Path(self.working_dir).mkdir(parents=True, exist_ok=True)
 
+        # Save chunk index
         index_path = Path(self.working_dir) / "chunk_index.json"
-
         with open(index_path, "w") as f:
             json.dump(self._chunk_index, f)
+
+        # Save documents from _store
+        docs_path = Path(self.working_dir) / "chunk_documents.json"
+        docs = self._store.filter_documents({})
+        docs_data = [{"id": doc.id, "content": doc.content, "meta": doc.meta} for doc in docs]
+        with open(docs_path, "w") as f:
+            json.dump(docs_data, f)
 
     @property
     def count(self) -> int:
