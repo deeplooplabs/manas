@@ -440,8 +440,8 @@ class ManasRAGIndexingPipeline:
 
         # Update communities (drop and regenerate for simplicity)
         # TODO: Implement true incremental community update
-        self.community_detector.run(graph_store=self.graph_store)
-        self._communities = self.graph_store.community_schema()
+        communities_result = self.community_detector.run(graph_store=self.graph_store)
+        self._communities = communities_result.get("communities", {})
         self._logger.debug(f"Updated {len(self._communities)} communities")
 
         # Update reports
