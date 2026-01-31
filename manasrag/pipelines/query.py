@@ -145,7 +145,7 @@ class ManasRAGQueryPipeline:
         graph_store: GraphDocumentStore,
         entity_store: Any = None,
         chunk_store: Any = None,
-        generator: BaseGenerator | None = None,
+        generator: Any | None = None,
         default_mode: str = "hi",
         top_k: int = 20,
         top_m: int = 10,
@@ -338,7 +338,7 @@ def build_query_pipeline(
     graph_store: GraphDocumentStore,
     entity_store: Any = None,
     chunk_store: Any = None,
-    generator: BaseGenerator | None = None,
+    generator: Any | None = None,
 ) -> Pipeline:
     """Build a Haystack Pipeline for ManasRAG querying.
 
