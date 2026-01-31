@@ -39,8 +39,10 @@ EXTENSION_TO_CONVERTER: dict[str, tuple[str, str]] = {
 }
 
 # MinerU-specific configuration
+# Use "pipeline" backend for CPU-only processing without torch dependency
+# Use "hybrid-auto-engine" for higher accuracy (requires torch)
 MINERU_CONVERTER_PARAMS: dict[str, Any] = {
-    "backend": "hybrid-auto-engine",
+    "backend": "pipeline",
     "language": "ch",
     "formula_enable": True,
     "table_enable": True,

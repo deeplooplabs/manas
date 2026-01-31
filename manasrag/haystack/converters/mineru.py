@@ -6,7 +6,9 @@ PDF documents and images into structured Document objects.
 
 from __future__ import annotations
 
+import json
 import logging
+import os
 import tempfile
 from io import BytesIO
 from pathlib import Path
@@ -18,11 +20,19 @@ from haystack.dataclasses import ByteStream, Document
 # MinerU imports with graceful fallback
 try:
     import mineru
+    from mineru.cli.common import do_parse, read_fn
+    from mineru.utils.enum_class import MakeMode
     from mineru.backend.pipeline.pipeline_middle_json_mkcontent import (
         union_make,
     )
-    from mineru.utils.enum_class import MakeMode
-    from mineru.cli.common import read_fn
+
+    # Patch torch.load to allow weights_only=False for older model compatibility
+    import torch
+    _original_load = torch.load
+    def _patched_load(*args, **kwargs):
+        kwargs.setdefault("weights_only", False)
+        return _original_load(*args, **kwargs)
+    torch.load = _patched_load
 
     MINERU_AVAILABLE = True
 except ImportError:
@@ -153,9 +163,23 @@ class MinerUToDocument:
         Returns:
             A Document object or None if parsing failed.
         """
-        source_name = getattr(stream, "source_url", None) or "stream"
+        from urllib.parse import urlparse, unquote
+
+        # Try to get URL from meta first, then from source_url attribute
+        source_url = stream.meta.get("url") if stream.meta else None
+        if not source_url:
+            source_url = getattr(stream, "source_url", None)
+
+        if source_url:
+            # Extract filename from URL
+            parsed = urlparse(source_url)
+            path = unquote(parsed.path)
+            file_name = Path(path).stem or "document"
+        else:
+            file_name = "document"
+
         pdf_bytes = stream.data
-        return self._parse_bytes(pdf_bytes, source_name, metadata)
+        return self._parse_bytes(pdf_bytes, file_name, metadata)
 
     def _parse_bytes(
         self, pdf_bytes: bytes, source_name: str, extra_meta: dict | None = None
@@ -206,47 +230,89 @@ class MinerUToDocument:
         Returns:
             Middle JSON structure from MinerU.
         """
-        from mineru import MagicPDF
+        # Prepare arguments for do_parse
+        pdf_file_names = [file_name]
+        pdf_bytes_list = [pdf_bytes]
+        p_lang_list = [self.language]
 
-        # Determine backend type
+        # Determine backend type and map to MinerU's expected format
         backend = self.backend
 
         if backend == "pipeline":
             # Multi-model pipeline
-            magic_pdf = MagicPDF(backend="pipeline")
-            result = magic_pdf.parse(
-                pdf_bytes,
-                output_dir,
+            do_parse(
+                output_dir=output_dir,
+                pdf_file_names=pdf_file_names,
+                pdf_bytes_list=pdf_bytes_list,
+                p_lang_list=p_lang_list,
+                backend="pipeline",
                 parse_method=self.parse_method,
                 formula_enable=self.formula_enable,
                 table_enable=self.table_enable,
+                f_draw_layout_bbox=False,
+                f_draw_span_bbox=False,
+                f_dump_md=False,
+                f_dump_middle_json=True,
+                f_dump_model_output=False,
+                f_dump_orig_pdf=False,
+                f_dump_content_list=False,
+                f_make_md_mode=MakeMode.MM_MD,
             )
         elif backend.startswith("vlm-"):
             # VLM-based parsing
             engine = "http" if "http" in backend else "auto"
-            magic_pdf = MagicPDF(backend="vlm", engine=engine)
-            result = magic_pdf.parse(
-                pdf_bytes,
-                output_dir,
+            vlm_backend = f"vlm-{engine}-engine"
+            do_parse(
+                output_dir=output_dir,
+                pdf_file_names=pdf_file_names,
+                pdf_bytes_list=pdf_bytes_list,
+                p_lang_list=p_lang_list,
+                backend=vlm_backend,
                 parse_method=self.parse_method,
                 formula_enable=self.formula_enable,
                 table_enable=self.table_enable,
+                f_draw_layout_bbox=False,
+                f_draw_span_bbox=False,
+                f_dump_md=False,
+                f_dump_middle_json=True,
+                f_dump_model_output=False,
+                f_dump_orig_pdf=False,
+                f_dump_content_list=False,
+                f_make_md_mode=MakeMode.MM_MD,
             )
         elif backend.startswith("hybrid-"):
             # Hybrid parsing
             engine = "http" if "http" in backend else "auto"
-            magic_pdf = MagicPDF(backend="hybrid", engine=engine)
-            result = magic_pdf.parse(
-                pdf_bytes,
-                output_dir,
+            hybrid_backend = f"hybrid-{engine}-engine"
+            do_parse(
+                output_dir=output_dir,
+                pdf_file_names=pdf_file_names,
+                pdf_bytes_list=pdf_bytes_list,
+                p_lang_list=p_lang_list,
+                backend=hybrid_backend,
                 parse_method=self.parse_method,
                 formula_enable=self.formula_enable,
                 table_enable=self.table_enable,
+                f_draw_layout_bbox=False,
+                f_draw_span_bbox=False,
+                f_dump_md=False,
+                f_dump_middle_json=True,
+                f_dump_model_output=False,
+                f_dump_orig_pdf=False,
+                f_dump_content_list=False,
+                f_make_md_mode=MakeMode.MM_MD,
             )
         else:
             raise ValueError(f"Unsupported backend: {backend}")
 
-        return result
+        # Read the middle.json output (note: mineru uses {file_name}_middle.json)
+        middle_json_path = os.path.join(
+            output_dir, file_name, self.parse_method, f"{file_name}_middle.json"
+        )
+        with open(middle_json_path, "r", encoding="utf-8") as f:
+            middle_json = json.load(f)
+
+        return middle_json
 
     def _normalize_metadata(
         self, meta: dict[str, Any] | None, count: int
