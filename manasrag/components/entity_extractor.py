@@ -10,7 +10,6 @@ from typing import Any
 
 from haystack import component
 from haystack.dataclasses import Document
-from haystack.dataclasses.chat_message import ChatMessage
 
 from manasrag._logging import get_logger, trace
 from manasrag.core.graph import Entity, Relation
@@ -208,9 +207,8 @@ class EntityExtractor:
 
         self._logger.debug(f"Calling LLM (prompt_len={len(prompt)})")
 
-        # Wrap prompt in a ChatMessage for Haystack 2.x compatibility
-        message = ChatMessage.from_user(prompt)
-        response = self.generator.run(messages=[message])
+        # Use the generator's run method with prompt for Haystack 2.x
+        response = self.generator.run(prompt=prompt)
         # Extract text from response based on generator type
         if hasattr(response, "replies"):
             result = response.replies[0].text if response.replies else ""

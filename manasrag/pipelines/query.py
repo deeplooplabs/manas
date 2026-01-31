@@ -10,7 +10,6 @@ import time
 from typing import Any
 
 from haystack import Pipeline, component
-from haystack.dataclasses.chat_message import ChatMessage
 
 from manasrag._logging import get_logger
 from manasrag.core.query_param import QueryParam
@@ -280,9 +279,7 @@ class ManasRAGQueryPipeline:
         self._logger.debug(f"Generating answer (prompt_len={len(prompt)})")
         start_time = time.time()
 
-        # Wrap prompt in a ChatMessage for Haystack 2.x compatibility
-        message = ChatMessage.from_user(prompt)
-        response = self.generator.run(messages=[message])
+        response = self.generator.run(prompt=prompt)
 
         # Extract text from response
         if hasattr(response, "replies"):
