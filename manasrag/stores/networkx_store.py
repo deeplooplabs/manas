@@ -49,6 +49,7 @@ class NetworkXGraphStore(GraphDocumentStore):
         super().__init__(namespace, working_dir, global_config)
         self._graph: nx.DiGraph = nx.DiGraph()
         self._communities: dict[str, Community] = {}
+        self._reports: dict[str, str] = {}  # Community reports
         self._cluster_algorithm = self.global_config.get("cluster_algorithm", "leiden")
 
         # Load existing data if available
@@ -320,6 +321,7 @@ class NetworkXGraphStore(GraphDocumentStore):
         """Load graph data from disk if available."""
         graph_path = Path(self.working_dir) / f"{self.namespace}_graph.json"
         comm_path = Path(self.working_dir) / f"{self.namespace}_communities.json"
+        reports_path = Path(self.working_dir) / f"{self.namespace}_reports.json"
 
         if graph_path.exists():
             try:
@@ -339,12 +341,21 @@ class NetworkXGraphStore(GraphDocumentStore):
             except Exception:
                 self._communities = {}
 
+        # Load reports
+        if reports_path.exists():
+            try:
+                with open(reports_path, "r") as f:
+                    self._reports = json.load(f)
+            except Exception:
+                self._reports = {}
+
     def save_to_disk(self) -> None:
         """Save graph data to disk."""
         os.makedirs(self.working_dir, exist_ok=True)
 
         graph_path = Path(self.working_dir) / f"{self.namespace}_graph.json"
         comm_path = Path(self.working_dir) / f"{self.namespace}_communities.json"
+        reports_path = Path(self.working_dir) / f"{self.namespace}_reports.json"
 
         # Save graph
         graph_data = nx.node_link_data(self._graph)
@@ -369,6 +380,10 @@ class NetworkXGraphStore(GraphDocumentStore):
         }
         with open(comm_path, "w") as f:
             json.dump(comm_data, f, indent=2)
+
+        # Save reports
+        with open(reports_path, "w") as f:
+            json.dump(self._reports, f, indent=2)
 
     def index_done_callback(self) -> None:
         """Save data after indexing."""

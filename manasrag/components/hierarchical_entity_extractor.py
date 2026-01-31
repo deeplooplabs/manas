@@ -372,8 +372,28 @@ class HierarchicalEntityExtractor:
             raise ValueError("Generator not configured")
 
         response = self.generator.run(prompt=prompt)
-        if hasattr(response, "replies"):
-            return response.replies[0].text if response.replies else ""
+
+        # Extract text from response - handle various Haystack response formats
+        if isinstance(response, dict):
+            if "replies" in response and response["replies"]:
+                reply = response["replies"][0]
+                if isinstance(reply, dict) and "content" in reply:
+                    return reply["content"]
+                elif isinstance(reply, str):
+                    return reply
+                return str(reply)
+            elif "content" in response:
+                return response["content"]
+            return str(response)
+        elif hasattr(response, "replies") and response.replies:
+            reply = response.replies[0]
+            if hasattr(reply, "content"):
+                return reply.content
+            elif hasattr(reply, "text"):
+                return reply.text
+            elif isinstance(reply, dict) and "content" in reply:
+                return reply["content"]
+            return str(reply)
         return str(response)
 
     def _parse_entities(self, text: str, chunk_id: str) -> List[Entity]:

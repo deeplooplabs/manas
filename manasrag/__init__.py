@@ -300,9 +300,19 @@ class ManasRAG:
         """
         self._logger.info(f"Indexing {len(documents)} documents (project={project_id}, incremental={incremental})")
         indexing_pipeline = self._get_project(project_id).indexing_pipeline
+        graph_store = self._get_project(project_id).graph_store
+
         if incremental:
-            return indexing_pipeline.index_incremental(documents, force_reindex=force_reindex)
-        return indexing_pipeline.index(documents)
+            result = indexing_pipeline.index_incremental(documents, force_reindex=force_reindex)
+        else:
+            result = indexing_pipeline.index(documents)
+
+        # Copy communities and reports from indexing pipeline to graph_store for query access
+        graph_store._communities = indexing_pipeline.communities
+        graph_store._reports = indexing_pipeline.reports
+        self._logger.debug(f"Synced {len(graph_store._communities)} communities and {len(graph_store._reports)} reports to graph_store")
+
+        return result
 
     def query(
         self,

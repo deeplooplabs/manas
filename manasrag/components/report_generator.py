@@ -174,11 +174,36 @@ class CommunityReportGenerator:
 
         self._logger.debug(f"Calling LLM (prompt_len={len(prompt)})")
         response = self.generator.run(prompt=prompt)
-        if hasattr(response, "replies"):
-            result = response.replies[0].text if response.replies else ""
-            self._logger.debug(f"LLM response (len={len(result)})")
-            return result
-        return str(response)
+
+        # Extract text from response - handle various Haystack response formats
+        if isinstance(response, dict):
+            if "replies" in response and response["replies"]:
+                reply = response["replies"][0]
+                if isinstance(reply, dict) and "content" in reply:
+                    result = reply["content"]
+                elif isinstance(reply, str):
+                    result = reply
+                else:
+                    result = str(reply)
+            elif "content" in response:
+                result = response["content"]
+            else:
+                result = str(response)
+        elif hasattr(response, "replies") and response.replies:
+            reply = response.replies[0]
+            if hasattr(reply, "content"):
+                result = reply.content
+            elif hasattr(reply, "text"):
+                result = reply.text
+            elif isinstance(reply, dict) and "content" in reply:
+                result = reply["content"]
+            else:
+                result = str(reply)
+        else:
+            result = str(response)
+
+        self._logger.debug(f"LLM response (len={len(result)})")
+        return result
 
     def _get_report_prompt(self) -> str:
         """Get the community report generation prompt."""

@@ -20,7 +20,10 @@ from manasrag._logging import get_logger
 from manasrag.components.entity_extractor import (
     EntityExtractor,
 )
-from manasrag.components.community_detector import CommunityDetector
+from manasrag.components.community_detector import (
+    CommunityDetector,
+    CommunityAssigner,
+)
 from manasrag.components.report_generator import CommunityReportGenerator
 from manasrag.stores.base import GraphDocumentStore
 from manasrag.stores.networkx_store import NetworkXGraphStore
@@ -248,6 +251,21 @@ class ManasRAGIndexingPipeline:
         self._communities = communities_result.get("communities", {})
         self._logger.debug(f"Detected {len(self._communities)} communities")
 
+        # Step 4.5: Assign communities to entities and update graph nodes
+        if self._communities and entities:
+            assigner = CommunityAssigner()
+            assigner_result = assigner.run(entities=entities, communities=self._communities)
+            updated_entities = assigner_result.get("entities", [])
+
+            # Update graph store nodes with cluster info
+            for entity in updated_entities:
+                node_data = self.graph_store.get_node(entity.entity_name)
+                if node_data:
+                    node_data["clusters"] = json.dumps(entity.clusters)
+                    self.graph_store.upsert_node(entity.entity_name, node_data)
+
+            self._logger.debug(f"Updated {len(updated_entities)} entities with cluster assignments")
+
         # Step 5: Generate reports
         if self.report_generator and self._communities:
             reports_result = self.report_generator.run(
@@ -443,6 +461,18 @@ class ManasRAGIndexingPipeline:
         communities_result = self.community_detector.run(graph_store=self.graph_store)
         self._communities = communities_result.get("communities", {})
         self._logger.debug(f"Updated {len(self._communities)} communities")
+
+        # Assign communities to entities and update graph nodes
+        if self._communities and entities:
+            assigner = CommunityAssigner()
+            assigner_result = assigner.run(entities=entities, communities=self._communities)
+            updated_entities = assigner_result.get("entities", [])
+
+            for entity in updated_entities:
+                node_data = self.graph_store.get_node(entity.entity_name)
+                if node_data:
+                    node_data["clusters"] = json.dumps(entity.clusters)
+                    self.graph_store.upsert_node(entity.entity_name, node_data)
 
         # Update reports
         if self.report_generator and self._communities:

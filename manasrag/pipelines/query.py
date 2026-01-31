@@ -281,17 +281,44 @@ class ManasRAGQueryPipeline:
 
         response = self.generator.run(prompt=prompt)
 
-        # Extract text from response
-        if hasattr(response, "replies"):
-            replies = response.replies
-            if replies and len(replies) > 0:
-                answer = replies[0].text if hasattr(replies[0], "text") else str(replies[0])
-                elapsed = time.time() - start_time
-                self._logger.debug(f"LLM response (len={len(answer)}, time={elapsed:.2f}s)")
-                return answer
+        # Debug logging
+        self._logger.debug(f"Response type: {type(response).__name__}")
 
-        # Fallback for unexpected response format
-        return str(response)
+        # Extract text from response - handle various Haystack response formats
+        answer = ""
+
+        # Case 1: Response is a dict (newer Haystack/OpenAI SDK format)
+        if isinstance(response, dict):
+            if "replies" in response and response["replies"]:
+                replies = response["replies"]
+                first_reply = replies[0]
+                if isinstance(first_reply, dict) and "content" in first_reply:
+                    answer = first_reply["content"]
+                elif isinstance(first_reply, str):
+                    answer = first_reply
+                else:
+                    answer = str(first_reply)
+            elif "content" in response:
+                answer = response["content"]
+            else:
+                answer = str(response)
+        # Case 2: Response has replies attribute (Haystack Response object)
+        elif hasattr(response, "replies") and response.replies:
+            reply = response.replies[0]
+            if hasattr(reply, "content"):
+                answer = reply.content
+            elif hasattr(reply, "text"):
+                answer = reply.text
+            elif isinstance(reply, dict) and "content" in reply:
+                answer = reply["content"]
+            else:
+                answer = str(reply)
+        else:
+            answer = str(response)
+
+        elapsed = time.time() - start_time
+        self._logger.debug(f"LLM response (len={len(answer)}, time={elapsed:.2f}s)")
+        return answer
 
     @property
     def communities(self) -> dict:
