@@ -30,6 +30,7 @@ dependencies = [
     "tiktoken",
     "click>=8.0",
     "pyyaml",
+    "mineru",
 ]
 
 [project.optional-dependencies]

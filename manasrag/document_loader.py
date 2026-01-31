@@ -27,7 +27,7 @@ def _compute_doc_id(content: str) -> str:
 # ===== EXTENSION TO CONVERTER MAPPING =====
 # Maps file extensions to (module_path, class_name) tuples for lazy import
 EXTENSION_TO_CONVERTER: dict[str, tuple[str, str]] = {
-    ".pdf": ("haystack.components.converters", "PyPDFToDocument"),
+    ".pdf": ("manasrag.haystack.converters", "MinerUToDocument"),
     ".docx": ("haystack.components.converters", "DOCXToDocument"),
     ".html": ("haystack.components.converters", "HTMLToDocument"),
     ".htm": ("haystack.components.converters", "HTMLToDocument"),
@@ -36,6 +36,19 @@ EXTENSION_TO_CONVERTER: dict[str, tuple[str, str]] = {
     ".xlsx": ("haystack.components.converters", "XLSXToDocument"),
     ".csv": ("haystack.components.converters", "CSVToDocument"),
     ".txt": ("haystack.components.converters", "TextFileToDocument"),
+}
+
+# MinerU-specific configuration
+MINERU_CONVERTER_PARAMS: dict[str, Any] = {
+    "backend": "hybrid-auto-engine",
+    "language": "ch",
+    "formula_enable": True,
+    "table_enable": True,
+}
+
+# Custom initialization parameters for converters
+CONVERTER_INIT_PARAMS: dict[str, dict[str, Any]] = {
+    ".pdf": MINERU_CONVERTER_PARAMS,
 }
 
 # ===== MIME TYPE TO EXTENSION MAPPING =====
@@ -317,7 +330,7 @@ class DocumentLoader:
         except (ImportError, AttributeError) as e:
             # Provide helpful error message for missing optional dependencies
             dep_map = {
-                ".pdf": "pypdf",
+                ".pdf": "pypdf or mineru",
                 ".docx": "python-docx",
                 ".html": "boilerpy3",
                 ".htm": "boilerpy3",
@@ -332,7 +345,9 @@ class DocumentLoader:
                 ) from e
             raise
 
-        converter = converter_class()
+        # Check for custom initialization parameters (e.g., for MinerU)
+        init_params = CONVERTER_INIT_PARAMS.get(ext, {})
+        converter = converter_class(**init_params)
         self._converter_cache[ext] = converter
         return converter
 
