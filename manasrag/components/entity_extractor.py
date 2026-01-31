@@ -13,6 +13,7 @@ from haystack.dataclasses import Document
 
 from manasrag._logging import get_logger, trace
 from manasrag.core.graph import Entity, Relation
+from manasrag.utils.token_utils import compute_mdhash_id
 
 
 # Default entity types to extract
@@ -103,7 +104,8 @@ class EntityExtractor:
 
         for doc in documents:
             content = doc.content
-            chunk_id = doc.id or f"chunk_{hash(content)}"
+            # Use same chunk_id format as indexing pipeline for consistency
+            chunk_id = compute_mdhash_id(content[:200], prefix="chunk-")
 
             # Extract entities first
             entities = self._extract_entities(content, chunk_id, prompt_template)

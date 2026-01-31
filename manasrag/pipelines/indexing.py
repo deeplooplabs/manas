@@ -284,6 +284,7 @@ class ManasRAGIndexingPipeline:
                     "content": entity.entity_name + " " + entity.description,
                     "entity_name": entity.entity_name,
                     "entity_type": entity.entity_type,
+                    "source_id": entity.source_id,
                 }
             self.entity_vector_store.upsert(entity_data)
             self.entity_vector_store.save_to_disk()
@@ -496,6 +497,8 @@ class ManasRAGIndexingPipeline:
                 entity_data[entity_hash] = {
                     "content": entity.entity_name + " " + entity.description,
                     "entity_name": entity.entity_name,
+                    "entity_type": entity.entity_type,
+                    "source_id": entity.source_id,
                 }
             self.entity_vector_store.upsert(entity_data)
 

@@ -250,7 +250,8 @@ class HierarchicalEntityExtractor:
 
         # Stage 1: Extract entities from each chunk
         for doc in documents:
-            chunk_id = doc.id or f"chunk_{hash(doc.content)}"
+            # Use same chunk_id format as indexing pipeline for consistency
+            chunk_id = compute_mdhash_id(doc.content[:200], prefix="chunk-")
             content = doc.content
 
             # Extract entities
@@ -267,7 +268,8 @@ class HierarchicalEntityExtractor:
 
         # Stage 2: Extract relations using entity context
         for doc in documents:
-            chunk_id = doc.id or f"chunk_{hash(doc.content)}"
+            # Use same chunk_id format as indexing pipeline for consistency
+            chunk_id = compute_mdhash_id(doc.content[:200], prefix="chunk-")
             content = doc.content
             entities_in_chunk = chunk_entity_map.get(chunk_id, [])
             entity_names = [e.entity_name for e in entities_in_chunk]
