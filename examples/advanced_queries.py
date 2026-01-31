@@ -43,7 +43,7 @@ def main():
     chunk_store = ChunkVectorStore(working_dir="./hirag_data")
     entity_store = EntityVectorStore(working_dir="./hirag_data")
 
-    hirag = HiRAG(
+    hirag = ManasRAG(
         working_dir="./hirag_data",
         generator=generator,
         entity_store=entity_store,

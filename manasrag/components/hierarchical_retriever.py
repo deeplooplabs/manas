@@ -198,7 +198,11 @@ class HierarchicalRetriever:
 
         chunks = []
         for doc in results:
-            chunks.append(doc.content)
+            # Handle both dict and Document returns
+            if isinstance(doc, dict):
+                chunks.append(doc.get("content", ""))
+            else:
+                chunks.append(doc.content)
 
         # Join with separator
         return "\n\n---\n\n".join(chunks[:param.top_k])
