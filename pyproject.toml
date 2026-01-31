@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [
-    { name = "Your Name", email = "your.email@example.com" }
+    { name = "Qiulin", email = "qiulin@deeploop.dev" }
 ]
 keywords = ["rag", "llm", "haystack", "knowledge-graph", "hierarchical"]
 classifiers = [
@@ -72,9 +72,9 @@ all = [
 manas = "manasrag.cli:cli"
 
 [project.urls]
-Homepage = "https://github.com/yourusername/manasrag"
-Documentation = "https://github.com/yourusername/manasrag#readme"
-Source = "https://github.com/yourusername/manasrag"
+Homepage = "https://github.com/deeplooplabs/manasrag"
+Documentation = "https://github.com/deeplooplabs/manasrag#readme"
+Source = "https://github.com/deeplooplabs/manasrag"
 
 [tool.hatch.build.targets.wheel]
 packages = ["manasrag"]
