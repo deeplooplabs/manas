@@ -76,6 +76,10 @@ class EntityVectorStore:
             self._entity_index[entity_name] = entity_hash
 
         if documents:
+            # Delete existing documents to avoid DuplicateDocumentError
+            existing_ids = [doc.id for doc in documents if self._store.filter_documents({"field": "id", "operator": "==", "value": doc.id})]
+            if existing_ids:
+                self._store.delete_documents(existing_ids)
             self._store.write_documents(documents)
 
     def query(
@@ -290,6 +294,10 @@ class ChunkVectorStore:
             self._chunk_index[chunk_hash] = chunk_data
 
         if documents:
+            # Delete existing documents to avoid DuplicateDocumentError
+            existing_ids = [doc.id for doc in documents if self._store.filter_documents({"field": "id", "operator": "==", "value": doc.id})]
+            if existing_ids:
+                self._store.delete_documents(existing_ids)
             self._store.write_documents(documents)
 
     def query(
