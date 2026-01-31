@@ -8,11 +8,12 @@ from __future__ import annotations
 
 import logging
 import tempfile
+from io import BytesIO
 from pathlib import Path
 from typing import Any
 
 from haystack import component
-from haystack.dataclasses import Document
+from haystack.dataclasses import ByteStream, Document
 
 # MinerU imports with graceful fallback
 try:
@@ -91,13 +92,13 @@ class MinerUToDocument:
     @component.output_types(documents=list[Document])
     def run(
         self,
-        sources: list[str | Path],
+        sources: list[str | Path | ByteStream],
         meta: dict[str, Any] | None = None,
     ) -> dict[str, list[Document]]:
         """Execute document conversion.
 
         Args:
-            sources: List of source file paths.
+            sources: List of source file paths or ByteStream objects.
             meta: Optional metadata dictionary or list of metadata dicts.
 
         Returns:
@@ -107,16 +108,20 @@ class MinerUToDocument:
         meta_list = self._normalize_metadata(meta, len(sources))
 
         for source, metadata in zip(sources, meta_list):
-            source_path = Path(source)
-            if not source_path.exists():
-                logger.warning(f"File not found: {source_path}")
-                continue
-
             try:
-                result_doc = self._parse_single_file(source_path)
+                if isinstance(source, ByteStream):
+                    # Handle ByteStream from URL downloads
+                    result_doc = self._parse_byte_stream(source, metadata)
+                else:
+                    # Handle file path
+                    source_path = Path(source)
+                    if not source_path.exists():
+                        logger.warning(f"File not found: {source_path}")
+                        continue
+                    result_doc = self._parse_single_file(source_path)
+                    if result_doc is not None:
+                        result_doc.meta = {**result_doc.meta, **metadata}
                 if result_doc is not None:
-                    # Merge provided metadata with default metadata
-                    result_doc.meta = {**result_doc.meta, **metadata}
                     documents.append(result_doc)
             except Exception as e:
                 logger.warning(f"Could not parse {source}: {e}")
@@ -134,24 +139,58 @@ class MinerUToDocument:
             A Document object or None if parsing failed.
         """
         pdf_bytes = read_fn(str(source_path))
+        return self._parse_bytes(pdf_bytes, str(source_path))
 
+    def _parse_byte_stream(
+        self, stream: ByteStream, metadata: dict[str, Any]
+    ) -> Document | None:
+        """Parse a ByteStream using MinerU.
+
+        Args:
+            stream: ByteStream object from URL downloads.
+            metadata: Additional metadata to include.
+
+        Returns:
+            A Document object or None if parsing failed.
+        """
+        source_name = getattr(stream, "source_url", "stream") or "stream"
+        pdf_bytes = stream.to_bytes()
+        return self._parse_bytes(pdf_bytes, source_name, metadata)
+
+    def _parse_bytes(
+        self, pdf_bytes: bytes, source_name: str, extra_meta: dict | None = None
+    ) -> Document | None:
+        """Parse bytes using MinerU.
+
+        Args:
+            pdf_bytes: Document content as bytes.
+            source_name: Name or path of the source.
+            extra_meta: Additional metadata to include.
+
+        Returns:
+            A Document object or None if parsing failed.
+        """
         with tempfile.TemporaryDirectory() as tmp_dir:
             # Parse with MinerU
             middle_json = self._parse_with_mineru(
-                pdf_bytes, str(source_path), tmp_dir
+                pdf_bytes, source_name, tmp_dir
             )
 
             # Extract markdown content
             pdf_info = middle_json.get("pdf_info", [middle_json])
             md_content = union_make(pdf_info, MakeMode.MM_MD, "")
 
+            meta = {
+                "source_file": source_name,
+                "backend": self.backend,
+                "language": self.language,
+            }
+            if extra_meta:
+                meta.update(extra_meta)
+
             return Document(
                 content=md_content,
-                meta={
-                    "source_file": str(source_path),
-                    "backend": self.backend,
-                    "language": self.language,
-                },
+                meta=meta,
             )
 
     def _parse_with_mineru(
