@@ -91,3 +91,4 @@ nul
 uv.lock.bak
 /.claude/settings.local.json
 /config.yaml
+/hirag_data
