@@ -125,7 +125,7 @@ class ManasRAG:
 
     def __init__(
         self,
-        working_dir: str = "./hirag_cache",
+        working_dir: str = "./manas_data",
         graph_backend: str = "networkx",
         generator: Any = None,
         entity_store: Any = None,

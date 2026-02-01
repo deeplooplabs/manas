@@ -5,11 +5,19 @@ built on top of Haystack's document store abstraction.
 """
 
 import json
+from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, List, Optional
 
 from haystack.dataclasses import Document
 from haystack.document_stores.in_memory import InMemoryDocumentStore
+
+
+class EmbeddingProvider(str, Enum):
+    """Embedding provider options."""
+
+    SENTENCE_TRANSFORMERS = "sentence-transformers"
+    OPENAI = "openai"
 
 
 class EntityVectorStore:
@@ -22,6 +30,8 @@ class EntityVectorStore:
     def __init__(
         self,
         embedding_func: Callable[[List[str]], List[List[float]]] | None = None,
+        embedding_provider: EmbeddingProvider | None = None,
+        embedding_model: str | None = None,
         meta_fields: set | None = None,
         working_dir: str = "./manas_data",
     ):
@@ -30,18 +40,80 @@ class EntityVectorStore:
         Args:
             embedding_func: Function to generate embeddings for text.
                 Should accept a list of strings and return a list of embeddings.
+            embedding_provider: Provider for generating embeddings
+                (sentence-transformers or openai).
+            embedding_model: Model name for the embedding provider.
+                For sentence-transformers: model name from HuggingFace.
+                For openai: model name like "text-embedding-3-small".
             meta_fields: Metadata fields to store with each entity.
             working_dir: Directory for persistent storage.
         """
         self.embedding_func = embedding_func
+        self.embedding_provider = embedding_provider
+        self.embedding_model = embedding_model
         self.meta_fields = meta_fields or {"entity_name"}
         self.working_dir = working_dir
 
         self._store = InMemoryDocumentStore()
         self._entity_index: dict[str, str] = {}  # entity_name -> doc_id
+        self._embeddings: dict[str, List[float]] = {}  # doc_id -> embedding
+
+        # Initialize embedding client if provider specified
+        self._embedding_client: Any = None
+        if self.embedding_provider == EmbeddingProvider.OPENAI:
+            self._init_openai_client()
+        elif self.embedding_provider == EmbeddingProvider.SENTENCE_TRANSFORMERS:
+            self._init_sentence_transformers()
 
         # Load from disk if available
         self._load_from_disk()
+
+    def _init_openai_client(self) -> None:
+        """Initialize OpenAI embedding client."""
+        try:
+            from openai import OpenAI
+            self._embedding_client = OpenAI()
+        except ImportError:
+            self._embedding_client = None
+
+    def _init_sentence_transformers(self) -> None:
+        """Initialize sentence-transformers embedding model."""
+        try:
+            from sentence_transformers import SentenceTransformer
+            model_name = self.embedding_model or "all-MiniLM-L6-v2"
+            self._embedding_client = SentenceTransformer(model_name)
+        except ImportError:
+            self._embedding_client = None
+
+    def _compute_embedding(self, texts: List[str]) -> List[List[float]]:
+        """Compute embeddings using the configured provider.
+
+        Args:
+            texts: List of texts to embed.
+
+        Returns:
+            List of embedding vectors.
+        """
+        if self.embedding_func:
+            return self.embedding_func(texts)
+
+        if self._embedding_client is None:
+            raise ValueError(
+                "No embedding function or provider configured. "
+                "Set embedding_func, or provide embedding_provider and embedding_model."
+            )
+
+        if self.embedding_provider == EmbeddingProvider.OPENAI:
+            response = self._embedding_client.embeddings.create(
+                model=self.embedding_model or "text-embedding-3-small",
+                input=texts,
+            )
+            return [data.embedding for data in response.data]
+
+        elif self.embedding_provider == EmbeddingProvider.SENTENCE_TRANSFORMERS:
+            return self._embedding_client.encode(texts).tolist()
+
+        raise ValueError(f"Unsupported embedding provider: {self.embedding_provider}")
 
     def upsert(
         self,
@@ -57,14 +129,16 @@ class EntityVectorStore:
                 - Other metadata fields
         """
         documents = []
+        texts_to_embed: list[tuple[str, str]] = []  # (doc_id, text)
 
         for entity_hash, entity_data in entities.items():
             entity_name = entity_data.get("entity_name", "")
+            content = entity_data.get("content", entity_name)
 
             # Create document
             doc = Document(
                 id=entity_hash,
-                content=entity_data.get("content", entity_name),
+                content=content,
                 meta={
                     "entity_name": entity_name,
                     **{k: v for k, v in entity_data.items() if k != "content"}
@@ -75,12 +149,23 @@ class EntityVectorStore:
             # Update index
             self._entity_index[entity_name] = entity_hash
 
+            # Collect for embedding if provider configured
+            if self.embedding_provider or self.embedding_func:
+                texts_to_embed.append((entity_hash, content))
+
         if documents:
             # Delete existing documents to avoid DuplicateDocumentError
             existing_ids = [doc.id for doc in documents if self._store.filter_documents({"field": "id", "operator": "==", "value": doc.id})]
             if existing_ids:
                 self._store.delete_documents(existing_ids)
             self._store.write_documents(documents)
+
+            # Compute and store embeddings
+            if texts_to_embed:
+                texts = [t[1] for t in texts_to_embed]
+                embeddings = self._compute_embedding(texts)
+                for (doc_id, _), embedding in zip(texts_to_embed, embeddings):
+                    self._embeddings[doc_id] = embedding
 
     def query(
         self,
@@ -101,12 +186,29 @@ class EntityVectorStore:
         if not query:
             return []
 
-        # Use BM25 retrieval for text-based search
-        results = self._store.bm25_retrieval(
-            query=query,
-            top_k=top_k,
-            filters=filters,
-        )
+        # Use vector similarity if embeddings are available
+        if self._embeddings and (self.embedding_provider or self.embedding_func):
+            try:
+                query_embedding = self._compute_embedding([query])[0]
+                results = self._store.query_by_embedding(
+                    query_embedding=query_embedding,
+                    top_k=top_k,
+                    filters=filters,
+                )
+            except (ValueError, Exception):
+                # Fallback to BM25 if embedding fails
+                results = self._store.bm25_retrieval(
+                    query=query,
+                    top_k=top_k,
+                    filters=filters,
+                )
+        else:
+            # Use BM25 retrieval for text-based search
+            results = self._store.bm25_retrieval(
+                query=query,
+                top_k=top_k,
+                filters=filters,
+            )
 
         return [
             {
@@ -182,14 +284,21 @@ class EntityVectorStore:
         if doc_ids:
             self._store.delete_documents(doc_ids)
 
-            # Remove from index
+            # Remove from index and embeddings
+            for doc_id in doc_ids:
+                self._embeddings.pop(doc_id, None)
             for name in entity_names:
                 self._entity_index.pop(name, None)
 
+    def clear_embeddings(self) -> None:
+        """Clear all stored embeddings."""
+        self._embeddings.clear()
+
     def _load_from_disk(self) -> None:
-        """Load index and documents from disk."""
+        """Load index, documents, and embeddings from disk."""
         index_path = Path(self.working_dir) / "entity_index.json"
         docs_path = Path(self.working_dir) / "entity_documents.json"
+        embeddings_path = Path(self.working_dir) / "entity_embeddings.json"
 
         # Load entity index
         if index_path.exists():
@@ -198,6 +307,16 @@ class EntityVectorStore:
                     self._entity_index = json.load(f)
             except (json.JSONDecodeError, IOError):
                 self._entity_index = {}
+
+        # Load embeddings
+        if embeddings_path.exists():
+            try:
+                with open(embeddings_path, "r") as f:
+                    data = json.load(f)
+                    # Convert string keys back to lists
+                    self._embeddings = {k: v for k, v in data.items()}
+            except (json.JSONDecodeError, IOError):
+                self._embeddings = {}
 
         # Load documents from _store
         if docs_path.exists():
@@ -215,13 +334,18 @@ class EntityVectorStore:
                 pass
 
     def save_to_disk(self) -> None:
-        """Save index and documents to disk."""
+        """Save index, documents, and embeddings to disk."""
         Path(self.working_dir).mkdir(parents=True, exist_ok=True)
 
         # Save entity index
         index_path = Path(self.working_dir) / "entity_index.json"
         with open(index_path, "w") as f:
             json.dump(self._entity_index, f)
+
+        # Save embeddings
+        embeddings_path = Path(self.working_dir) / "entity_embeddings.json"
+        with open(embeddings_path, "w") as f:
+            json.dump(self._embeddings, f)
 
         # Save documents from _store
         docs_path = Path(self.working_dir) / "entity_documents.json"
@@ -246,7 +370,7 @@ class ChunkVectorStore:
     def __init__(
         self,
         embedding_func: Callable[[List[str]], List[List[float]]] | None = None,
-        working_dir: str = "./hirag_cache",
+        working_dir: str = "./manas_data",
     ):
         """Initialize the chunk vector store.
 
@@ -478,7 +602,7 @@ class DocIdIndex:
     enabling efficient deletion and update operations.
     """
 
-    def __init__(self, working_dir: str = "./hirag_cache"):
+    def __init__(self, working_dir: str = "./manas_data"):
         self.working_dir = working_dir
         # doc_id -> list of chunk_ids
         self._doc_chunks: dict[str, list[str]] = {}
@@ -559,7 +683,7 @@ class KVStore:
     def __init__(
         self,
         namespace: str = "default",
-        working_dir: str = "./hirag_cache",
+        working_dir: str = "./manas_data",
     ):
         """Initialize the KV store.
 

@@ -31,7 +31,7 @@ class GraphDocumentStore(ABC):
     def __init__(
         self,
         namespace: str = "default",
-        working_dir: str = "./hirag_cache",
+        working_dir: str = "./manas_data",
         global_config: dict | None = None,
     ):
         """Initialize the graph store.
@@ -273,6 +273,24 @@ class GraphDocumentStore(ABC):
         raise NotImplementedError
 
     # ===== Utility Methods =====
+
+    @abstractmethod
+    def get_communities(self) -> dict:
+        """Get all detected communities.
+
+        Returns:
+            Dictionary mapping community IDs to Community objects.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_reports(self) -> dict:
+        """Get all community reports.
+
+        Returns:
+            Dictionary mapping community IDs to report strings.
+        """
+        raise NotImplementedError
 
     def index_start_callback(self) -> None:
         """Callback called before indexing starts."""

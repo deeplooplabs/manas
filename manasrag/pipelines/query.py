@@ -225,8 +225,8 @@ class ManasRAGQueryPipeline:
             self._logger.debug(f"Retrieved {len(retrieved_entities)} entities")
 
         # Get communities and reports from graph store
-        communities = getattr(self.graph_store, "_communities", {})
-        reports = getattr(self.graph_store, "_reports", {})
+        communities = self.graph_store.get_communities()
+        reports = self.graph_store.get_reports()
 
         # Build context using hierarchical retriever
         context_result = self.hierarchical_retriever.run(
@@ -288,59 +288,65 @@ class ManasRAGQueryPipeline:
         self._logger.debug(f"Response type: {type(response).__name__}")
         self._logger.debug(f"Response repr: {repr(response)[:500]}")
 
-        # Extract text from response - handle various Haystack response formats
-        answer = ""
+        answer = self._extract_llm_response(response)
 
+        elapsed = time.time() - start_time
+        self._logger.debug(f"LLM response (len={len(answer)}, time={elapsed:.2f}s)")
+        return answer
+
+    @staticmethod
+    def _extract_llm_response(response: Any) -> str:
+        """Extract text from LLM response, handling various formats.
+
+        Args:
+            response: Raw response from LLM generator.
+
+        Returns:
+            Extracted text content.
+        """
         # Case 1: Response is a dict (newer Haystack/OpenAI SDK format)
         if isinstance(response, dict):
             if "replies" in response and response["replies"]:
                 replies = response["replies"]
                 first_reply = replies[0]
                 if isinstance(first_reply, dict) and "content" in first_reply:
-                    answer = first_reply["content"]
+                    return first_reply["content"]
                 elif isinstance(first_reply, str):
-                    answer = first_reply
+                    return first_reply
                 elif isinstance(first_reply, ChatMessage):
-                    # Handle ChatMessage inside dict - use .text property (new Haystack API)
-                    answer = first_reply.text
+                    return first_reply.text
                 else:
-                    answer = str(first_reply)
+                    return str(first_reply)
             elif "content" in response:
-                answer = response["content"]
+                return response["content"]
             else:
-                answer = str(response)
+                return str(response)
         # Case 2: Response has replies attribute (Haystack Response object)
         elif hasattr(response, "replies") and response.replies:
             reply = response.replies[0]
-            # Use .text property for ChatMessage (new Haystack API)
             if hasattr(reply, "text"):
-                answer = reply.text
+                return reply.text
             elif isinstance(reply, dict) and "content" in reply:
-                answer = reply["content"]
+                return reply["content"]
             elif isinstance(reply, str):
-                answer = reply
+                return reply
             else:
-                answer = str(reply)
+                return str(reply)
         # Case 3: Response is a ChatMessage (direct generator response)
         elif isinstance(response, ChatMessage):
-            # Use .text property (new Haystack API)
-            answer = response.text
+            return response.text
         else:
-            answer = str(response)
-
-        elapsed = time.time() - start_time
-        self._logger.debug(f"LLM response (len={len(answer)}, time={elapsed:.2f}s)")
-        return answer
+            return str(response)
 
     @property
     def communities(self) -> dict:
         """Get communities from graph store."""
-        return getattr(self.graph_store, "_communities", {})
+        return self.graph_store.get_communities()
 
     @property
     def reports(self) -> dict:
         """Get reports from graph store."""
-        return getattr(self.graph_store, "_reports", {})
+        return self.graph_store.get_reports()
 
 
 def build_query_pipeline(

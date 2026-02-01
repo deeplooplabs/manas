@@ -30,7 +30,7 @@ class Neo4jGraphStore(GraphDocumentStore):
         password: str = "password",
         database: str = "neo4j",
         namespace: str = "default",
-        working_dir: str = "./hirag_cache",
+        working_dir: str = "./manas_data",
         global_config: dict | None = None,
     ):
         """Initialize the Neo4j graph store.
@@ -53,6 +53,10 @@ class Neo4jGraphStore(GraphDocumentStore):
             auth=(username, password),
         )
 
+        # Storage for communities and reports
+        self._communities: dict[str, Community] = {}
+        self._reports: dict[str, str] = {}
+
         # Create constraints for better performance
         self._create_constraints()
 
@@ -68,12 +72,12 @@ class Neo4jGraphStore(GraphDocumentStore):
             except Exception:
                 pass  # Constraint may already exist
 
-    def _execute_query(
+    def _execute_write(
         self,
         query: str,
         parameters: dict | None = None,
     ) -> Any:
-        """Execute a Cypher query.
+        """Execute a Cypher write query with transaction.
 
         Args:
             query: Cypher query string.
@@ -83,8 +87,9 @@ class Neo4jGraphStore(GraphDocumentStore):
             Query result.
         """
         with self._driver.session(database=self._database) as session:
-            result = session.run(query, parameters or {})
-            return result
+            return session.execute_write(
+                lambda tx: tx.run(query, parameters or {})
+            )
 
     # ===== Node Operations =====
 
@@ -125,7 +130,7 @@ class Neo4jGraphStore(GraphDocumentStore):
     def upsert_node(self, node_id: str, node_data: dict) -> None:
         """Create or update a node."""
         # Merge ensures idempotency
-        self._execute_query(
+        self._execute_write(
             """
             MERGE (e:Entity {name: $name})
             SET e.type = $type,
@@ -209,7 +214,7 @@ class Neo4jGraphStore(GraphDocumentStore):
 
     def upsert_edge(self, src_id: str, tgt_id: str, edge_data: dict) -> None:
         """Create or update an edge between two nodes."""
-        self._execute_query(
+        self._execute_write(
             """
             MATCH (s:Entity {name: $src})
             MATCH (t:Entity {name: $tgt})
@@ -239,14 +244,14 @@ class Neo4jGraphStore(GraphDocumentStore):
 
     def delete_node(self, node_id: str) -> None:
         """Delete a node and all its edges from the graph."""
-        self._execute_query(
+        self._execute_write(
             "MATCH (e:Entity {name: $name}) DETACH DELETE e",
             {"name": node_id},
         )
 
     def delete_edge(self, src_id: str, tgt_id: str) -> None:
         """Delete an edge between two nodes."""
-        self._execute_query(
+        self._execute_write(
             """
             MATCH (s:Entity {name: $src})-[r]-(t:Entity {name: $tgt})
             DELETE r
@@ -281,7 +286,7 @@ class Neo4jGraphStore(GraphDocumentStore):
             self.delete_node(node_id)
             return True
 
-        self._execute_query(
+        self._execute_write(
             "MATCH (e:Entity {name: $name}) SET e.source_id = $source_id",
             {"name": node_id, "source_id": "|".join(current_sources)},
         )
@@ -306,7 +311,7 @@ class Neo4jGraphStore(GraphDocumentStore):
             self.delete_edge(src_id, tgt_id)
             return True
 
-        self._execute_query(
+        self._execute_write(
             """
             MATCH (s:Entity {name: $src})-[r]-(t:Entity {name: $tgt})
             SET r.source_id = $source_id
@@ -329,15 +334,16 @@ class Neo4jGraphStore(GraphDocumentStore):
         """
         try:
             # Try using GDS library
-            return self._gds_clustering(algorithm)
+            self._communities = self._gds_clustering(algorithm)
         except Exception:
             # Fallback to simple clustering
-            return self._simple_clustering()
+            self._communities = self._simple_clustering()
+        return self._communities
 
     def _gds_clustering(self, algorithm: str) -> dict[str, Community]:
         """Use Neo4j Graph Data Science library for clustering."""
-        # Project graph
-        self._execute_query(
+        # Project graph (write operation)
+        self._execute_write(
             """
             CALL gds.graph.project(
                 'hiragGraph',
@@ -350,7 +356,7 @@ class Neo4jGraphStore(GraphDocumentStore):
             """
         )
 
-        # Run Louvain algorithm
+        # Run Louvain algorithm (read operation)
         result = self._execute_query(
             """
             CALL gds.louvain.stream('hiragGraph')
@@ -415,10 +421,25 @@ class Neo4jGraphStore(GraphDocumentStore):
 
     def community_schema(self) -> dict[str, SingleCommunitySchema]:
         """Get the community structure schema."""
-        communities = self._communities if hasattr(self, "_communities") else {}
         return {
-            k: v.to_schema() for k, v in communities.items()
+            k: v.to_schema() for k, v in self._communities.items()
         }
+
+    def get_communities(self) -> dict:
+        """Get all detected communities.
+
+        Returns:
+            Dictionary mapping community IDs to Community objects.
+        """
+        return self._communities
+
+    def get_reports(self) -> dict:
+        """Get all community reports.
+
+        Returns:
+            Dictionary mapping community IDs to report strings.
+        """
+        return self._reports
 
     # ===== Path Operations =====
 

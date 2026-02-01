@@ -36,7 +36,7 @@ class NetworkXGraphStore(GraphDocumentStore):
     def __init__(
         self,
         namespace: str = "default",
-        working_dir: str = "./hirag_cache",
+        working_dir: str = "./manas_data",
         global_config: dict | None = None,
     ):
         """Initialize the NetworkX graph store.
@@ -275,6 +275,22 @@ class NetworkXGraphStore(GraphDocumentStore):
             comm_id: comm.to_schema()
             for comm_id, comm in self._communities.items()
         }
+
+    def get_communities(self) -> dict:
+        """Get all detected communities.
+
+        Returns:
+            Dictionary mapping community IDs to Community objects.
+        """
+        return self._communities
+
+    def get_reports(self) -> dict:
+        """Get all community reports.
+
+        Returns:
+            Dictionary mapping community IDs to report strings.
+        """
+        return self._reports
 
     # ===== Path Operations =====
 
