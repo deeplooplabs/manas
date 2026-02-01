@@ -139,7 +139,7 @@ class CommunityReportGenerator:
             }
 
             # Collect results as they complete
-            for future in as_completed(futures):
+            for future in as_completed(futures.values()):
                 comm_id, report = future.result()
                 pending_reports[comm_id] = report
                 reports[comm_id] = report
