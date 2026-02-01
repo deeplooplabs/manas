@@ -5,6 +5,7 @@ providing high-level overviews of the entities and relationships within.
 """
 
 import json
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
 from haystack import component
@@ -29,15 +30,18 @@ class CommunityReportGenerator:
         self,
         generator: Any | None = None,
         max_tokens: int = 2000,
+        max_workers: int = 4,
     ):
         """Initialize the CommunityReportGenerator.
 
         Args:
             generator: Haystack ChatGenerator for LLM calls.
             max_tokens: Maximum tokens for community descriptions in prompts.
+            max_workers: Maximum number of parallel workers for report generation.
         """
         self.generator = generator
         self.max_tokens = max_tokens
+        self.max_workers = max_workers
 
         # Logger
         self._logger = get_logger("report_generator")
@@ -47,12 +51,14 @@ class CommunityReportGenerator:
         self,
         graph_store: GraphDocumentStore,
         communities: dict[str, Community],
+        max_workers: int | None = None,
     ) -> dict:
         """Generate reports for all communities.
 
         Args:
             graph_store: The graph store for fetching entity/relation details.
             communities: Dictionary of communities to generate reports for.
+            max_workers: Override for number of parallel workers.
 
         Returns:
             Dictionary with:
@@ -66,10 +72,10 @@ class CommunityReportGenerator:
 
         self._logger.info(f"Generating reports for {len(communities)} communities")
 
-        reports = {}
-
         # Process communities by level (bottom-up)
         levels = sorted(set(c.level for c in communities.values()))
+
+        reports = {}
 
         for level in levels:
             level_communities = {
@@ -77,16 +83,92 @@ class CommunityReportGenerator:
             }
             self._logger.debug(f"Processing level {level}: {len(level_communities)} communities")
 
-            for comm_id, community in level_communities.items():
-                report = self._generate_single_report(
-                    graph_store, community, reports
+            # Use provided max_workers or fall back to instance setting
+            workers = max_workers if max_workers is not None else self.max_workers
+
+            if workers <= 1:
+                # Sequential processing for single worker or disabled parallelism
+                for comm_id, community in level_communities.items():
+                    report = self._generate_single_report(
+                        graph_store, community, reports
+                    )
+                    community.report_string = report
+                    reports[comm_id] = report
+            else:
+                # Parallel report generation
+                reports = self._generate_reports_parallel(
+                    graph_store, level_communities, reports, workers
                 )
-                community.report_string = report
-                reports[comm_id] = report
 
         self._logger.debug(f"Generated {len(reports)} reports")
 
         return {"reports": reports}
+
+    def _generate_reports_parallel(
+        self,
+        graph_store: GraphDocumentStore,
+        level_communities: dict[str, Community],
+        existing_reports: dict[str, str],
+        max_workers: int,
+    ) -> dict:
+        """Generate reports for multiple communities in parallel.
+
+        Args:
+            graph_store: The graph store for fetching entity/relation details.
+            level_communities: Dictionary of communities at this level to generate reports for.
+            existing_reports: Reports from sub-communities (for hierarchical mode).
+            max_workers: Maximum number of parallel workers.
+
+        Returns:
+            Updated dictionary with reports for these communities.
+        """
+        reports = {}
+        pending_reports = existing_reports.copy()
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Submit all report generation tasks
+            futures = {
+                comm_id: executor.submit(
+                    self._generate_report_task,
+                    comm_id,
+                    community,
+                    graph_store,
+                    pending_reports,
+                )
+                for comm_id, community in level_communities.items()
+            }
+
+            # Collect results as they complete
+            for future in as_completed(futures):
+                comm_id, report = future.result()
+                pending_reports[comm_id] = report
+                reports[comm_id] = report
+
+        return reports
+
+    def _generate_report_task(
+        self,
+        comm_id: str,
+        community: Community,
+        graph_store: GraphDocumentStore,
+        existing_reports: dict[str, str],
+    ) -> tuple[str, str]:
+        """Task wrapper for parallel report generation.
+
+        Args:
+            comm_id: Community ID.
+            community: The community to generate a report for.
+            graph_store: The graph store for fetching details.
+            existing_reports: Reports from sub-communities.
+
+        Returns:
+            Tuple of (community_id, report_string).
+        """
+        report = self._generate_single_report(
+            graph_store, community, existing_reports
+        )
+        community.report_string = report
+        return comm_id, report
 
     def _generate_single_report(
         self,

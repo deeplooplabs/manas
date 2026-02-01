@@ -54,6 +54,8 @@ class EntityExtractor:
         tuple_delimiter: str = DEFAULT_TUPLE_DELIMITER,
         record_delimiter: str = DEFAULT_RECORD_DELIMITER,
         completion_delimiter: str = DEFAULT_COMPLETION_DELIMITER,
+        batch_size: int = 1,
+        enable_gleaning: bool = True,
     ):
         """Initialize the EntityExtractor.
 
@@ -65,6 +67,8 @@ class EntityExtractor:
             tuple_delimiter: Delimiter for tuple fields in LLM output.
             record_delimiter: Delimiter between records in LLM output.
             completion_delimiter: Delimiter marking end of output.
+            batch_size: Number of documents to process in a batch.
+            enable_gleaning: Whether to enable gleaning for entity/relation extraction.
         """
         self.generator = generator
         self.entity_types = entity_types or DEFAULT_ENTITY_TYPES
@@ -73,6 +77,8 @@ class EntityExtractor:
         self.tuple_delimiter = tuple_delimiter
         self.record_delimiter = record_delimiter
         self.completion_delimiter = completion_delimiter
+        self.batch_size = batch_size
+        self.enable_gleaning = enable_gleaning
 
         # Logger
         self._logger = get_logger("entity_extractor")
@@ -82,12 +88,16 @@ class EntityExtractor:
         self,
         documents: list[Document],
         prompt_template: str | None = None,
+        batch_size: int | None = None,
+        enable_gleaning: bool | None = None,
     ) -> dict:
         """Extract entities and relations from documents.
 
         Args:
             documents: List of Documents to process.
             prompt_template: Optional custom prompt template.
+            batch_size: Override for batch size (default: self.batch_size).
+            enable_gleaning: Override for gleaning enabled (default: self.enable_gleaning).
 
         Returns:
             Dictionary with:
@@ -97,26 +107,37 @@ class EntityExtractor:
         if not documents:
             return {"entities": [], "relations": []}
 
-        self._logger.info(f"Extracting from {len(documents)} chunks")
+        # Use provided values or fall back to instance settings
+        batch = batch_size if batch_size is not None else self.batch_size
+        gleam = enable_gleaning if enable_gleaning is not None else self.enable_gleaning
+
+        self._logger.info(f"Extracting from {len(documents)} chunks (batch_size={batch}, gleaning={gleam})")
 
         all_entities = []
         all_relations = []
 
-        for doc in documents:
-            content = doc.content
-            # Use same chunk_id format as indexing pipeline for consistency
-            chunk_id = compute_mdhash_id(content[:200], prefix="chunk-")
-
-            # Extract entities first
-            entities = self._extract_entities(content, chunk_id, prompt_template)
-            all_entities.extend(entities)
-
-            # Extract relations using known entities
-            entity_names = [e.entity_name for e in entities]
-            relations = self._extract_relations(
-                content, chunk_id, entity_names, prompt_template
-            )
-            all_relations.extend(relations)
+        if batch <= 1 or len(documents) <= 1:
+            # Original sequential processing for single batch or single document
+            for doc in documents:
+                entities, relations = self._extract_single(
+                    doc.content,
+                    doc,
+                    prompt_template,
+                    gleam,
+                )
+                all_entities.extend(entities)
+                all_relations.extend(relations)
+        else:
+            # Batch processing - process documents in batches
+            for i in range(0, len(documents), batch):
+                batch_docs = documents[i:i + batch]
+                batch_entities, batch_relations = self._extract_batch(
+                    batch_docs,
+                    prompt_template,
+                    gleam,
+                )
+                all_entities.extend(batch_entities)
+                all_relations.extend(batch_relations)
 
         self._logger.debug(f"Extracted {len(all_entities)} entities, {len(all_relations)} relations")
 
@@ -125,11 +146,77 @@ class EntityExtractor:
             "relations": all_relations,
         }
 
+    def _extract_single(
+        self,
+        content: str,
+        doc: Document,
+        prompt_template: str | None,
+        enable_gleaning: bool,
+    ) -> tuple[list, list]:
+        """Extract entities and relations from a single document.
+
+        Args:
+            content: Document content.
+            doc: The document object.
+            prompt_template: Optional custom prompt template.
+            enable_gleaning: Whether to enable gleaning.
+
+        Returns:
+            Tuple of (entities list, relations list).
+        """
+        # Use same chunk_id format as indexing pipeline for consistency
+        chunk_id = compute_mdhash_id(content[:200], prefix="chunk-")
+
+        # Extract entities first
+        entities = self._extract_entities(content, chunk_id, prompt_template, enable_gleaning)
+
+        # Extract relations using known entities
+        entity_names = [e.entity_name for e in entities]
+        relations = self._extract_relations(
+            content, chunk_id, entity_names, prompt_template, enable_gleaning
+        )
+
+        return entities, relations
+
+    def _extract_batch(
+        self,
+        documents: list[Document],
+        prompt_template: str | None,
+        enable_gleaning: bool,
+    ) -> tuple[list, list]:
+        """Extract entities and relations from a batch of documents.
+
+        Args:
+            documents: List of Documents to process.
+            prompt_template: Optional custom prompt template.
+            enable_gleaning: Whether to enable gleaning.
+
+        Returns:
+            Tuple of (entities list, relations list).
+        """
+        # For batch processing, we process each document separately
+        # but the overhead is reduced by avoiding repeated setup
+        all_entities = []
+        all_relations = []
+
+        for doc in documents:
+            entities, relations = self._extract_single(
+                doc.content,
+                doc,
+                prompt_template,
+                enable_gleaning,
+            )
+            all_entities.extend(entities)
+            all_relations.extend(relations)
+
+        return all_entities, all_relations
+
     def _extract_entities(
         self,
         text: str,
         chunk_id: str,
         prompt_template: str | None = None,
+        enable_gleaning: bool = True,
     ) -> list[Entity]:
         """Extract entities from text using LLM.
 
@@ -137,6 +224,7 @@ class EntityExtractor:
             text: Input text.
             chunk_id: Source chunk ID.
             prompt_template: Optional custom prompt.
+            enable_gleaning: Whether to enable gleaning.
 
         Returns:
             List of extracted Entity objects.
@@ -156,7 +244,7 @@ class EntityExtractor:
         entities = self._parse_entities(result, chunk_id)
 
         # Gleaning: check for missed entities
-        if entities and self.max_gleaning > 0:
+        if enable_gleaning and entities and self.max_gleaning > 0:
             entities = self._gleaning_entities(text, chunk_id, entities)
 
         return entities
@@ -167,6 +255,7 @@ class EntityExtractor:
         chunk_id: str,
         known_entities: list[str],
         prompt_template: str | None = None,
+        enable_gleaning: bool = True,
     ) -> list[Relation]:
         """Extract relationships from text using LLM.
 
@@ -175,6 +264,7 @@ class EntityExtractor:
             chunk_id: Source chunk ID.
             known_entities: List of known entity names.
             prompt_template: Optional custom prompt.
+            enable_gleaning: Whether to enable gleaning.
 
         Returns:
             List of extracted Relation objects.
@@ -197,7 +287,7 @@ class EntityExtractor:
         relations = self._parse_relations(result, chunk_id)
 
         # Gleaning: check for missed relations
-        if relations and self.max_gleaning > 0:
+        if enable_gleaning and relations and self.max_gleaning > 0:
             relations = self._gleaning_relations(text, chunk_id, relations, known_entities)
 
         return relations

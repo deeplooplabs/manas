@@ -12,6 +12,7 @@ This module implements the document indexing pipeline that:
 import json
 from typing import Any
 
+import tiktoken
 from haystack import Pipeline, component
 from haystack.dataclasses import Document
 from haystack.components.preprocessors import DocumentSplitter
@@ -201,6 +202,9 @@ class ManasRAGIndexingPipeline:
         self._communities: dict = {}
         self._reports: dict = {}
 
+        # Track dirty stores for batch save optimization
+        self._dirty_stores: set = set()
+
         # Logger
         self._logger = get_logger("indexing")
 
@@ -287,7 +291,7 @@ class ManasRAGIndexingPipeline:
                     "source_id": entity.source_id,
                 }
             self.entity_vector_store.upsert(entity_data)
-            self.entity_vector_store.save_to_disk()
+            self._dirty_stores.add("entity_vector_store")
 
         if self.chunk_vector_store and chunks:
             chunk_data = {}
@@ -300,7 +304,7 @@ class ManasRAGIndexingPipeline:
                     "tokens": count_tokens(chunk.content),
                 }
             self.chunk_vector_store.upsert(chunk_data)
-            self.chunk_vector_store.save_to_disk()
+            self._dirty_stores.add("chunk_vector_store")
 
         # Update doc_id_index for documents with explicit (user-set) IDs.
         # Haystack auto-generates a content-hash ID when none is provided,
@@ -321,7 +325,10 @@ class ManasRAGIndexingPipeline:
                     if entity_sources & set(doc_chunk_ids):
                         self.doc_id_index.add_entities(doc.id, [entity.entity_name])
 
-            self.doc_id_index.save_to_disk()
+            self._dirty_stores.add("doc_id_index")
+
+        # Save all dirty stores in a single batch
+        self._save_dirty_stores()
 
         # Save to disk
         self.graph_store.index_done_callback()
@@ -336,31 +343,65 @@ class ManasRAGIndexingPipeline:
         }
 
     def _split_documents(self, documents: list[Document]) -> list[Document]:
-        """Split documents into chunks."""
-        # Simple character-based splitting (in production, use tokenizer)
+        """Split documents into chunks using token-based splitting.
+
+        Uses tiktoken for accurate token counting instead of
+        character-based estimation.
+        """
         chunks = []
-        chunk_size_chars = self.chunk_size * 4  # Rough estimate: 4 chars per token
+
+        # Initialize tokenizer (default to cl100k_base for GPT-4/3.5)
+        try:
+            encoder = tiktoken.get_encoding("cl100k_base")
+        except Exception:
+            encoder = tiktoken.get_encoding("o200k_base")
 
         for doc_idx, doc in enumerate(documents):
             content = doc.content
             meta = doc.meta or {}
             meta["source_doc_id"] = doc.id or f"doc_{doc_idx}"
 
-            for i in range(0, len(content), chunk_size_chars - self.chunk_overlap):
-                chunk_content = content[i : i + chunk_size_chars]
+            # Tokenize content
+            tokens = encoder.encode(content)
+            num_tokens = len(tokens)
+
+            # Skip if content is too short
+            if num_tokens <= self.chunk_overlap:
+                chunks.append(
+                    Document(
+                        content=content,
+                        meta=meta.copy(),
+                        id=f"{doc.id}_chunk_0" if doc.id else "chunk_0",
+                    )
+                )
+                continue
+
+            # Split into overlapping chunks
+            chunk_start = 0
+            chunk_index = 0
+
+            while chunk_start < num_tokens:
+                chunk_end = min(chunk_start + self.chunk_size, num_tokens)
+                chunk_tokens = tokens[chunk_start:chunk_end]
+                chunk_content = encoder.decode(chunk_tokens)
+
                 chunk_meta = meta.copy()
-                chunk_meta["chunk_index"] = i // (chunk_size_chars - self.chunk_overlap)
-                chunk_meta["chunk_order_index"] = chunk_meta["chunk_index"]
+                chunk_meta["chunk_index"] = chunk_index
+                chunk_meta["chunk_order_index"] = chunk_index
 
                 chunks.append(
                     Document(
                         content=chunk_content,
                         meta=chunk_meta,
-                        id=f"{doc.id}_chunk_{chunk_meta['chunk_index']}"
+                        id=f"{doc.id}_chunk_{chunk_index}"
                         if doc.id
                         else f"chunk_{len(chunks)}",
                     )
                 )
+
+                # Move to next chunk with overlap
+                chunk_start += self.chunk_size - self.chunk_overlap
+                chunk_index += 1
 
         return chunks
 
@@ -383,6 +424,18 @@ class ManasRAGIndexingPipeline:
         # Load reports
         report_store = KVStore("reports", self.working_dir)
         self._reports = report_store.get_all()
+
+    def _save_dirty_stores(self) -> None:
+        """Save all dirty stores in a single batch."""
+        for store_name in self._dirty_stores:
+            if store_name == "entity_vector_store" and self.entity_vector_store:
+                self.entity_vector_store.save_to_disk()
+            elif store_name == "chunk_vector_store" and self.chunk_vector_store:
+                self.chunk_vector_store.save_to_disk()
+            elif store_name == "doc_id_index":
+                self.doc_id_index.save_to_disk()
+
+        self._dirty_stores.clear()
 
     def index_incremental(
         self,
@@ -501,9 +554,11 @@ class ManasRAGIndexingPipeline:
                     "source_id": entity.source_id,
                 }
             self.entity_vector_store.upsert(entity_data)
+            self._dirty_stores.add("entity_vector_store")
 
-        # Save state
+        # Save state and dirty stores
         self._save_state()
+        self._save_dirty_stores()
         self.graph_store.save_to_disk()
 
         return {
@@ -519,7 +574,7 @@ class ManasRAGIndexingPipeline:
         self,
         docs: dict,
     ) -> dict:
-        """Split a batch of documents into chunks.
+        """Split a batch of documents into chunks using token-based splitting.
 
         Args:
             docs: Dictionary mapping doc_hash to doc data.
@@ -528,21 +583,51 @@ class ManasRAGIndexingPipeline:
             Dictionary mapping chunk_hash to chunk data.
         """
         chunks = {}
-        chunk_size_chars = self.chunk_size * 4
+
+        # Initialize tokenizer (default to cl100k_base for GPT-4/3.5)
+        try:
+            encoder = tiktoken.get_encoding("cl100k_base")
+        except Exception:
+            encoder = tiktoken.get_encoding("o200k_base")
 
         for doc_idx, (doc_hash, doc_data) in enumerate(docs.items()):
             content = doc_data["content"]
 
-            for i in range(0, len(content), chunk_size_chars - self.chunk_overlap):
-                chunk_content = content[i : i + chunk_size_chars]
-                chunk_hash = compute_mdhash_id(f"{doc_hash}_{i}", prefix="chunk-")
+            # Tokenize content
+            tokens = encoder.encode(content)
+            num_tokens = len(tokens)
+
+            # Skip if content is too short
+            if num_tokens <= self.chunk_overlap:
+                chunk_hash = compute_mdhash_id(f"{doc_hash}_0", prefix="chunk-")
+                chunks[chunk_hash] = {
+                    "content": content,
+                    "tokens": num_tokens,
+                    "chunk_order_index": 0,
+                    "full_doc_id": doc_hash,
+                }
+                continue
+
+            # Split into overlapping chunks
+            chunk_start = 0
+            chunk_order = 0
+
+            while chunk_start < num_tokens:
+                chunk_end = min(chunk_start + self.chunk_size, num_tokens)
+                chunk_tokens = tokens[chunk_start:chunk_end]
+                chunk_content = encoder.decode(chunk_tokens)
+                chunk_hash = compute_mdhash_id(f"{doc_hash}_{chunk_order}", prefix="chunk-")
 
                 chunks[chunk_hash] = {
                     "content": chunk_content,
-                    "tokens": count_tokens(chunk_content),
-                    "chunk_order_index": i // (chunk_size_chars - self.chunk_overlap),
+                    "tokens": len(chunk_tokens),
+                    "chunk_order_index": chunk_order,
                     "full_doc_id": doc_hash,
                 }
+
+                # Move to next chunk with overlap
+                chunk_start += self.chunk_size - self.chunk_overlap
+                chunk_order += 1
 
         return chunks
 
@@ -570,10 +655,17 @@ class ManasRAGIndexingPipeline:
         self.full_docs_store.save_to_disk()
         self.text_chunks_store.save_to_disk()
 
-        if self.entity_vector_store:
-            self.entity_vector_store.save_to_disk()
-        if self.chunk_vector_store:
-            self.chunk_vector_store.save_to_disk()
+    def _save_dirty_stores(self) -> None:
+        """Save all dirty stores in a single batch."""
+        for store_name in self._dirty_stores:
+            if store_name == "entity_vector_store" and self.entity_vector_store:
+                self.entity_vector_store.save_to_disk()
+            elif store_name == "chunk_vector_store" and self.chunk_vector_store:
+                self.chunk_vector_store.save_to_disk()
+            elif store_name == "doc_id_index":
+                self.doc_id_index.save_to_disk()
+
+        self._dirty_stores.clear()
 
     # ===== Document Management =====
 
@@ -625,9 +717,11 @@ class ManasRAGIndexingPipeline:
         # 5. Delete orphaned entities from EntityVectorStore
         if self.entity_vector_store and deleted_nodes:
             self.entity_vector_store.delete_entities(deleted_nodes)
+            self._dirty_stores.add("entity_vector_store")
 
         # 6. Remove from doc_id_index
         self.doc_id_index.remove_doc(doc_id)
+        self._dirty_stores.add("doc_id_index")
 
         # 7. Regenerate communities
         if self.community_detector:
@@ -643,7 +737,7 @@ class ManasRAGIndexingPipeline:
 
         # 8. Save all stores
         self._save_state()
-        self.doc_id_index.save_to_disk()
+        self._save_dirty_stores()
         self.graph_store.save_to_disk()
 
         return {

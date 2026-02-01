@@ -17,6 +17,7 @@ from dotenv import load_dotenv
 from haystack.utils.auth import Secret
 
 from manasrag import ManasRAG, QueryParam, RetrievalMode, __version__
+from manasrag._logging import setup_logging
 from manasrag.components import GraphVisualizer
 from manasrag.document_loader import DocumentLoader
 from manasrag.stores import EntityVectorStore, ChunkVectorStore
@@ -215,7 +216,13 @@ def _build_manasrag(
 @click.option(
     "--verbose/--no-verbose",
     default=False,
-    help="Enable verbose output.",
+    help="Enable verbose output (INFO level).",
+)
+@click.option(
+    "--log-level",
+    type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"]),
+    default="WARNING",
+    help="Logging level (default: WARNING).",
 )
 @click.option(
     "--timeout",
@@ -225,13 +232,17 @@ def _build_manasrag(
 )
 @click.version_option(version=__version__, prog_name="manas")
 @click.pass_context
-def cli(ctx: click.Context, working_dir: str | None, config: Path | None, verbose: bool, timeout: int | None) -> None:
+def cli(ctx: click.Context, working_dir: str | None, config: Path | None, verbose: bool, log_level: str, timeout: int | None) -> None:
     """ManasRAG: Hierarchical Retrieval-Augmented Generation CLI.
 
     Index documents and query knowledge graphs using the ManasRAG system.
     """
     # Load .env file
     load_dotenv()
+
+    # Configure logging (default WARNING, INFO if verbose)
+    log_level_value = "INFO" if verbose else log_level
+    setup_logging(level=log_level_value)
 
     # Load config
     config_data = _load_config(config)
@@ -245,6 +256,7 @@ def cli(ctx: click.Context, working_dir: str | None, config: Path | None, verbos
         default="./manas_data",
     )
     ctx.obj["verbose"] = verbose
+    ctx.obj["log_level"] = log_level
     ctx.obj["timeout"] = _resolve_value(
         timeout,
         config_data.get("timeout"),
