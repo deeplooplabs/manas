@@ -286,6 +286,7 @@ class ManasRAGQueryPipeline:
 
         # Debug logging
         self._logger.debug(f"Response type: {type(response).__name__}")
+        self._logger.debug(f"Response repr: {repr(response)[:500]}")
 
         # Extract text from response - handle various Haystack response formats
         answer = ""
@@ -299,6 +300,9 @@ class ManasRAGQueryPipeline:
                     answer = first_reply["content"]
                 elif isinstance(first_reply, str):
                     answer = first_reply
+                elif isinstance(first_reply, ChatMessage):
+                    # Handle ChatMessage inside dict - use .text property (new Haystack API)
+                    answer = first_reply.text
                 else:
                     answer = str(first_reply)
             elif "content" in response:
@@ -308,14 +312,19 @@ class ManasRAGQueryPipeline:
         # Case 2: Response has replies attribute (Haystack Response object)
         elif hasattr(response, "replies") and response.replies:
             reply = response.replies[0]
-            if hasattr(reply, "content"):
-                answer = reply.content
-            elif hasattr(reply, "text"):
+            # Use .text property for ChatMessage (new Haystack API)
+            if hasattr(reply, "text"):
                 answer = reply.text
             elif isinstance(reply, dict) and "content" in reply:
                 answer = reply["content"]
+            elif isinstance(reply, str):
+                answer = reply
             else:
                 answer = str(reply)
+        # Case 3: Response is a ChatMessage (direct generator response)
+        elif isinstance(response, ChatMessage):
+            # Use .text property (new Haystack API)
+            answer = response.text
         else:
             answer = str(response)
 

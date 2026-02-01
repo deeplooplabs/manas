@@ -193,7 +193,16 @@ class CommunityReportGenerator:
         elif hasattr(response, "replies") and response.replies:
             reply = response.replies[0]
             if hasattr(reply, "content"):
-                result = reply.content
+                content = reply.content
+                # Handle ChatMessage with TextContent objects
+                if isinstance(content, list) and content:
+                    result = "".join(
+                        getattr(c, "text", str(c)) for c in content
+                    )
+                elif isinstance(content, str):
+                    result = content
+                else:
+                    result = str(content)
             elif hasattr(reply, "text"):
                 result = reply.text
             elif isinstance(reply, dict) and "content" in reply:

@@ -1,12 +1,13 @@
 """CLI entry point for ManasRAG.
 
-This module provides a command-line interface for indexing documents
-and querying the ManasRAG knowledge graph.
+This module provides a command-line interface for indexing documents,
+querying the ManasRAG knowledge graph, and visualizing results.
 """
 
 import json
 import os
 import sys
+import webbrowser
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +17,7 @@ from dotenv import load_dotenv
 from haystack.utils.auth import Secret
 
 from manasrag import ManasRAG, QueryParam, RetrievalMode, __version__
+from manasrag.components import GraphVisualizer
 from manasrag.document_loader import DocumentLoader
 from manasrag.stores import EntityVectorStore, ChunkVectorStore
 
@@ -119,6 +121,7 @@ def _build_manasrag(
     top_k: int = 20,
     top_m: int = 10,
     verbose: bool = False,
+    project_id: str | None = None,
 ) -> ManasRAG:
     """Build a ManasRAG instance with the given configuration.
 
@@ -903,6 +906,417 @@ server:
   port: 8000
 """
         click.echo(output)
+
+
+@cli.command(name="visualize")
+@click.option(
+    "--type",
+    "viz_type",
+    type=click.Choice(["graph", "communities", "stats", "path", "all"]),
+    default="all",
+    help="Type of visualization to generate (default: all).",
+)
+@click.option(
+    "--output-dir",
+    type=click.Path(),
+    default=None,
+    help="Output directory for visualizations (default: ./manas_visualizations).",
+)
+@click.option(
+    "--layout",
+    type=click.Choice(["force", "hierarchical", "circular"]),
+    default="force",
+    help="Layout algorithm for graph visualization (default: force).",
+)
+@click.option(
+    "--color-by",
+    type=click.Choice(["entity_type", "community", "degree"]),
+    default="entity_type",
+    help="How to color nodes (default: entity_type).",
+)
+@click.option(
+    "--open/--no-open",
+    "open_browser",
+    default=True,
+    help="Open visualization in browser (default: true).",
+)
+@click.option(
+    "--graph-backend",
+    type=click.Choice(["networkx", "neo4j"]),
+    default=None,
+    help="Graph backend (default: networkx).",
+)
+@click.option(
+    "--model",
+    type=str,
+    default=None,
+    help="LLM model name (only needed for path visualization).",
+)
+@click.option(
+    "--api-key",
+    type=str,
+    default=None,
+    help="OpenAI API key (only needed for path visualization).",
+)
+@click.option(
+    "--base-url",
+    type=str,
+    default=None,
+    help="API base URL for custom endpoints.",
+)
+@click.option(
+    "--project-id",
+    type=str,
+    default=None,
+    help="Project ID for data isolation (default: default).",
+)
+@click.pass_context
+def visualize(
+    ctx: click.Context,
+    viz_type: str,
+    output_dir: str | None,
+    layout: str,
+    color_by: str,
+    open_browser: bool,
+    graph_backend: str | None,
+    model: str | None,
+    api_key: str | None,
+    base_url: str | None,
+    project_id: str | None,
+) -> None:
+    """Generate and open interactive knowledge graph visualizations.
+
+    Generates HTML-based visualizations that can be viewed in a web browser.
+    Supports knowledge graph structure, community clustering, entity statistics,
+    and query path visualizations.
+
+    Examples:
+
+        manas visualize
+
+        manas visualize --type graph --layout hierarchical
+
+        manas visualize --type communities --open false
+
+        manas visualize --type stats --output-dir ./my_viz
+
+        manas visualize --type path --model gpt-4o
+    """
+    import platform
+
+    config = ctx.obj["config"]
+    verbose = ctx.obj["verbose"]
+
+    # Resolve configuration values
+    working_dir = ctx.obj["working_dir"]
+    graph_backend = _resolve_value(graph_backend, config.get("graph_backend"), default="networkx")
+    model = _resolve_value(model, config.get("model"), default="gpt-4o-mini")
+    api_key = _resolve_value(api_key, config.get("api_key"), env_var="OPENAI_API_KEY")
+    base_url = _resolve_value(base_url, config.get("base_url"), env_var="OPENAI_BASE_URL")
+
+    # Check if data exists
+    if not Path(working_dir).exists():
+        raise click.ClickException(
+            f"No data found at {working_dir}. "
+            "Please run 'manas add-documents' first to index some documents."
+        )
+
+    # Resolve output directory
+    if output_dir is None:
+        output_dir = "./manas_visualizations"
+    output_path = Path(output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
+
+    # Check visualization dependencies
+    try:
+        from pyvis.network import Network
+    except ImportError:
+        raise click.ClickException(
+            "Visualization dependencies not installed. Run: pip install manas[visualization]"
+        )
+
+    if verbose:
+        click.echo(f"Initializing ManasRAG (working_dir={working_dir}, backend={graph_backend})...")
+
+    # Initialize ManasRAG (minimal, just for stores)
+    try:
+        manas = _build_manasrag(
+            working_dir=working_dir,
+            model=model,
+            api_key=api_key,
+            base_url=base_url,
+            graph_backend=graph_backend,
+            chunk_size=1200,
+            chunk_overlap=100,
+            timeout=ctx.obj.get("timeout", 600),
+            verbose=verbose,
+        )
+    except ManasRAGConfigError as e:
+        raise click.ClickException(str(e))
+    except Exception as e:
+        raise click.ClickException(f"Failed to initialize ManasRAG: {e}")
+
+    # Create visualizer
+    visualizer = GraphVisualizer(
+        output_dir=str(output_path),
+        default_layout=layout,
+    )
+
+    generated_files: dict[str, str] = {}
+
+    try:
+        # Get project-specific graph store
+        effective_project_id = project_id or "default"
+        project_graph_store = manas.get_graph_store(project_id=effective_project_id)
+        project_communities = project_graph_store._communities if hasattr(project_graph_store, "_communities") else {}
+
+        if viz_type in ("graph", "all"):
+            click.echo("Generating knowledge graph visualization...")
+            html_path = visualizer.visualize_knowledge_graph(
+                graph_store=project_graph_store,
+                layout=layout,
+                color_by=color_by,
+                show_labels=True,
+                physics=True,
+            )
+            generated_files["knowledge_graph"] = html_path
+            click.echo(f"  -> {html_path}")
+
+        if viz_type in ("communities", "all"):
+            click.echo("Generating community visualization...")
+            # Detect communities if needed
+            if not project_communities:
+                if verbose:
+                    click.echo("Detecting communities...")
+                project_communities = project_graph_store.clustering()
+                project_graph_store._communities = project_communities
+
+            html_path = visualizer.visualize_communities(
+                communities=project_communities,
+                graph_store=project_graph_store,
+                layout=layout,
+                show_community_labels=True,
+                show_entity_labels=False,
+            )
+            generated_files["communities"] = html_path
+            click.echo(f"  -> {html_path}")
+
+        if viz_type in ("stats", "all"):
+            click.echo("Generating entity statistics visualization...")
+            html_path = visualizer.visualize_entity_stats(
+                graph_store=project_graph_store,
+                chart_types=["distribution", "degree"],
+                show_top_n=20,
+            )
+            generated_files["statistics"] = html_path
+            click.echo(f"  -> {html_path}")
+
+        if viz_type == "path":
+            click.echo("Query path visualization requires source and target entities.")
+            click.echo("Use: manas visualize --type path --help for details")
+            return
+
+        # Summary
+        click.echo(f"\nGenerated {len(generated_files)} visualization(s)")
+
+        # Open in browser
+        if open_browser and generated_files:
+            # Prefer knowledge graph or first available
+            primary_file = generated_files.get("knowledge_graph") or list(generated_files.values())[0]
+            file_path = str(Path(primary_file).resolve())
+
+            # Use file:// URL with proper path format
+            if platform.system() == "Windows":
+                file_url = f"file:///{file_path}"
+            else:
+                file_url = f"file://{file_path}"
+
+            click.echo(f"\nOpening {Path(primary_file).name} in browser...")
+            webbrowser.open(file_url)
+
+    except Exception as e:
+        raise click.ClickException(f"Visualization failed: {e}")
+
+
+@cli.command(name="visualize-path")
+@click.argument("source", required=True)
+@click.argument("target", required=True)
+@click.option(
+    "--output-dir",
+    type=click.Path(),
+    default=None,
+    help="Output directory for visualizations (default: ./manas_visualizations).",
+)
+@click.option(
+    "--show-context",
+    type=int,
+    default=1,
+    help="Number of neighboring nodes to show (default: 1).",
+)
+@click.option(
+    "--open/--no-open",
+    "open_browser",
+    default=True,
+    help="Open visualization in browser (default: true).",
+)
+@click.option(
+    "--graph-backend",
+    type=click.Choice(["networkx", "neo4j"]),
+    default=None,
+    help="Graph backend (default: networkx).",
+)
+@click.option(
+    "--model",
+    type=str,
+    default=None,
+    help="LLM model name.",
+)
+@click.option(
+    "--api-key",
+    type=str,
+    default=None,
+    help="OpenAI API key.",
+)
+@click.option(
+    "--base-url",
+    type=str,
+    default=None,
+    help="API base URL for custom endpoints.",
+)
+@click.option(
+    "--project-id",
+    type=str,
+    default=None,
+    help="Project ID for data isolation (default: default).",
+)
+@click.pass_context
+def visualize_path(
+    ctx: click.Context,
+    source: str,
+    target: str,
+    output_dir: str | None,
+    show_context: int,
+    open_browser: bool,
+    graph_backend: str | None,
+    model: str | None,
+    api_key: str | None,
+    base_url: str | None,
+    project_id: str | None,
+) -> None:
+    """Visualize the shortest path between two entities.
+
+    Finds and visualizes the connection path between SOURCE entity and TARGET entity
+    through the knowledge graph.
+
+    Examples:
+
+        manas visualize-path "AI" "Knowledge Graphs"
+
+        manas visualize-path "Neural Networks" "Transformers" --show-context 2
+
+        manas visualize-path "GPT" "LLM" --no-open --output-dir ./my_viz
+    """
+    import platform
+
+    config = ctx.obj["config"]
+    verbose = ctx.obj["verbose"]
+
+    # Resolve configuration values
+    working_dir = ctx.obj["working_dir"]
+    graph_backend = _resolve_value(graph_backend, config.get("graph_backend"), default="networkx")
+    model = _resolve_value(model, config.get("model"), default="gpt-4o-mini")
+    api_key = _resolve_value(api_key, config.get("api_key"), env_var="OPENAI_API_KEY")
+    base_url = _resolve_value(base_url, config.get("base_url"), env_var="OPENAI_BASE_URL")
+
+    # Check if data exists
+    if not Path(working_dir).exists():
+        raise click.ClickException(
+            f"No data found at {working_dir}. "
+            "Please run 'manas add-documents' first to index some documents."
+        )
+
+    # Resolve output directory
+    if output_dir is None:
+        output_dir = "./manas_visualizations"
+    output_path = Path(output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
+
+    # Check visualization dependencies
+    try:
+        from pyvis.network import Network
+    except ImportError:
+        raise click.ClickException(
+            "Visualization dependencies not installed. Run: pip install manas[visualization]"
+        )
+
+    if verbose:
+        click.echo(f"Initializing ManasRAG (working_dir={working_dir})...")
+
+    # Initialize ManasRAG
+    try:
+        manas = _build_manasrag(
+            working_dir=working_dir,
+            model=model,
+            api_key=api_key,
+            base_url=base_url,
+            graph_backend=graph_backend,
+            chunk_size=1200,
+            chunk_overlap=100,
+            timeout=ctx.obj.get("timeout", 600),
+            verbose=verbose,
+        )
+    except ManasRAGConfigError as e:
+        raise click.ClickException(str(e))
+    except Exception as e:
+        raise click.ClickException(f"Failed to initialize ManasRAG: {e}")
+
+    # Create visualizer
+    visualizer = GraphVisualizer(
+        output_dir=str(output_path),
+        default_layout="hierarchical",
+    )
+
+    try:
+        # Get project-specific graph store
+        effective_project_id = project_id or "default"
+        project_graph_store = manas.get_graph_store(project_id=effective_project_id)
+
+        # Find path
+        click.echo(f"Finding path from '{source}' to '{target}' in project '{effective_project_id}'...")
+        path = project_graph_store.shortest_path(source.upper(), target.upper())
+
+        if not path or len(path) < 2:
+            raise click.ClickException(
+                f"No path found between '{source}' and '{target}'. "
+                "Try different entity names or check if entities exist."
+            )
+
+        click.echo(f"Path found: {' -> '.join(path)}")
+
+        # Generate visualization
+        html_path = visualizer.visualize_query_path(
+            path=path,
+            graph_store=project_graph_store,
+            show_context=show_context,
+            animate=True,
+            include_relation_descriptions=True,
+        )
+
+        click.echo(f"Visualization saved to: {html_path}")
+
+        # Open in browser
+        if open_browser:
+            file_path = str(Path(html_path).resolve())
+            if platform.system() == "Windows":
+                file_url = f"file:///{file_path}"
+            else:
+                file_url = f"file://{file_path}"
+
+            click.echo("Opening in browser...")
+            webbrowser.open(file_url)
+
+    except Exception as e:
+        raise click.ClickException(f"Path visualization failed: {e}")
 
 
 def main() -> None:

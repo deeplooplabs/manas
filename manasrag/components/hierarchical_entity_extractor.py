@@ -390,7 +390,15 @@ class HierarchicalEntityExtractor:
         elif hasattr(response, "replies") and response.replies:
             reply = response.replies[0]
             if hasattr(reply, "content"):
-                return reply.content
+                content = reply.content
+                # Handle ChatMessage with TextContent objects
+                if isinstance(content, list) and content:
+                    return "".join(
+                        getattr(c, "text", str(c)) for c in content
+                    )
+                elif isinstance(content, str):
+                    return content
+                return str(content)
             elif hasattr(reply, "text"):
                 return reply.text
             elif isinstance(reply, dict) and "content" in reply:
