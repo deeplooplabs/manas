@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 import streamlit as st
+import streamlit.components.v1 as components
 from dotenv import load_dotenv
 
 from haystack.components.generators.chat import OpenAIChatGenerator
@@ -94,6 +95,11 @@ def init_session_state() -> None:
         st.session_state.chat_history = []
     if "current_project" not in st.session_state:
         st.session_state.current_project = "default"
+    # Store loaded documents for indexing
+    if "loaded_documents" not in st.session_state:
+        st.session_state.loaded_documents = []
+    if "indexing_input_method" not in st.session_state:
+        st.session_state.indexing_input_method = "Upload Files"
 
 
 init_session_state()
@@ -314,9 +320,22 @@ def render_indexing_tab(manas: ManasRAG | None) -> None:
         "Select input method:",
         ["Upload Files", "Paste Text", "Load from Directory"],
         horizontal=True,
+        index=["Upload Files", "Paste Text", "Load from Directory"].index(
+            st.session_state.get("indexing_input_method", "Upload Files")
+        ),
     )
 
-    documents: list[Document] = []
+    # Update session state when input method changes
+    if input_method != st.session_state.get("indexing_input_method", "Upload Files"):
+        st.session_state.indexing_input_method = input_method
+        st.session_state.loaded_documents = []
+        st.rerun()
+
+    # Clear documents button
+    if st.session_state.loaded_documents:
+        if st.button("🗑️ Clear Loaded Documents", use_container_width=True):
+            st.session_state.loaded_documents = []
+            st.rerun()
 
     if input_method == "Upload Files":
         uploaded_files = st.file_uploader(
@@ -324,70 +343,94 @@ def render_indexing_tab(manas: ManasRAG | None) -> None:
             type=["pdf", "txt", "md", "docx", "html", "csv"],
             accept_multiple_files=True,
             help="Supported formats: PDF, TXT, MD, DOCX, HTML, CSV",
+            key="file_uploader",
         )
 
         if uploaded_files:
-            for file in uploaded_files:
-                with tempfile.NamedTemporaryFile(
-                    delete=False,
-                    suffix=f".{file.name.split('.')[-1]}",
-                ) as tmp:
-                    tmp.write(file.getvalue())
-                    tmp_path = tmp.name
+            if st.button("📥 Load Files", type="secondary", use_container_width=True):
+                loaded_count = 0
+                for file in uploaded_files:
+                    with tempfile.NamedTemporaryFile(
+                        delete=False,
+                        suffix=f".{file.name.split('.')[-1]}",
+                    ) as tmp:
+                        tmp.write(file.getvalue())
+                        tmp_path = tmp.name
 
-                try:
-                    loader = DocumentLoader(verbose=True)
-                    docs = loader.load([tmp_path])
-                    documents.extend(docs)
-                    st.success(f"Loaded {file.name}: {len(docs)} document(s)")
-                except Exception as e:
-                    st.error(f"Error loading {file.name}: {e}")
-                finally:
-                    os.unlink(tmp_path)
+                    try:
+                        loader = DocumentLoader(verbose=True)
+                        docs = loader.load([tmp_path])
+                        st.session_state.loaded_documents.extend(docs)
+                        loaded_count += len(docs)
+                        st.success(f"Loaded {file.name}: {len(docs)} document(s)")
+                    except Exception as e:
+                        st.error(f"Error loading {file.name}: {e}")
+                    finally:
+                        os.unlink(tmp_path)
+
+                if loaded_count > 0:
+                    st.success(f"Total: {loaded_count} document(s) loaded. Click 'Start Indexing' to begin.")
+                    st.rerun()
 
     elif input_method == "Paste Text":
         text_content = st.text_area(
             "Paste document text",
             height=300,
             help="Enter the text content you want to index.",
+            key="paste_text_area",
         )
 
         doc_id = st.text_input(
             "Document ID (Optional)",
             placeholder="Leave empty to auto-generate",
             help="A unique identifier for this document.",
+            key="paste_doc_id",
         )
 
-        if text_content and st.button("Index Text"):
-            documents = [Document(content=text_content, id=doc_id or None)]
+        if st.button("📥 Add Text", type="secondary", use_container_width=True):
+            if text_content:
+                doc = Document(content=text_content, id=doc_id or None)
+                st.session_state.loaded_documents.append(doc)
+                st.success(f"Document added. Total loaded: {len(st.session_state.loaded_documents)}")
+                st.rerun()
+            else:
+                st.warning("Please enter some text.")
 
     elif input_method == "Load from Directory":
         dir_path = st.text_input(
             "Directory Path",
             placeholder="./docs",
             help="Path to directory containing documents.",
+            key="dir_path_input",
         )
 
         file_pattern = st.text_input(
             "File Pattern",
             value="**/*",
             help="Glob pattern for matching files (e.g., **/*.pdf).",
+            key="file_pattern_input",
         )
 
-        if st.button("Load from Directory"):
+        if st.button("📥 Load from Directory", type="secondary", use_container_width=True):
             if dir_path:
                 try:
                     full_pattern = os.path.join(dir_path, file_pattern)
                     loader = DocumentLoader(verbose=True)
-                    documents = loader.load([full_pattern])
-                    st.success(f"Loaded {len(documents)} document(s)")
+                    docs = loader.load([full_pattern])
+                    st.session_state.loaded_documents.extend(docs)
+                    st.success(f"Loaded {len(docs)} document(s). Total: {len(st.session_state.loaded_documents)}")
+                    st.rerun()
                 except Exception as e:
                     st.error(f"Error loading from directory: {e}")
             else:
                 st.warning("Please enter a directory path.")
 
+    # Display loaded documents count
+    if st.session_state.loaded_documents:
+        st.markdown(f"**📦 Loaded Documents:** {len(st.session_state.loaded_documents)}")
+
     # Indexing Options
-    if documents:
+    if st.session_state.loaded_documents:
         st.markdown("---")
         st.markdown("### Indexing Options")
 
@@ -397,18 +440,21 @@ def render_indexing_tab(manas: ManasRAG | None) -> None:
                 "Incremental Indexing",
                 value=False,
                 help="Only index new documents.",
+                key="incremental_checkbox",
             )
         with col2:
             force_reindex = st.checkbox(
                 "Force Re-index",
                 value=False,
                 help="Re-index all documents.",
+                key="force_reindex_checkbox",
             )
 
-        if st.button("🚀 Start Indexing", type="primary", use_container_width=True):
+        if st.button("🚀 Start Indexing", type="primary", use_container_width=True, key="start_indexing"):
             with st.spinner("Indexing documents... This may take a while."):
                 try:
                     project_id = st.session_state.current_project
+                    documents = st.session_state.loaded_documents
                     result = manas.index(
                         documents,
                         project_id=project_id,
@@ -423,13 +469,18 @@ def render_indexing_tab(manas: ManasRAG | None) -> None:
                             "content": doc.content[:200] + "..." if len(doc.content) > 200 else doc.content,
                         }
 
+                    # Clear loaded documents after successful indexing
+                    st.session_state.loaded_documents = []
+
                     st.markdown('<div class="success-box">', unsafe_allow_html=True)
-                    st.markdown("#### Indexing Complete!")
+                    st.markdown("#### ✅ Indexing Complete!")
                     st.json(result)
                     st.markdown('</div>', unsafe_allow_html=True)
 
                 except Exception as e:
                     st.error(f"Indexing failed: {e}")
+                    import traceback
+                    st.error(traceback.format_exc())
 
     # Display Indexed Documents
     if st.session_state.indexed_documents:
@@ -634,7 +685,7 @@ def render_visualization_tab(manas: ManasRAG | None) -> None:
                     if path and Path(path).exists():
                         with open(path, "r", encoding="utf-8") as f:
                             html_content = f.read()
-                        st.components.v1.html(html_content, height=600, scrolling=True)
+                        components.html(html_content, height=600, scrolling=True)
 
             except Exception as e:
                 st.error(f"Visualization failed: {e}")
