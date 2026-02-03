@@ -149,7 +149,9 @@ class MinerUToDocument:
             A Document object or None if parsing failed.
         """
         pdf_bytes = read_fn(str(source_path))
-        return self._parse_bytes(pdf_bytes, str(source_path))
+        # Use only the file stem (name without extension) for MinerU
+        file_name = source_path.stem
+        return self._parse_bytes(pdf_bytes, file_name)
 
     def _parse_byte_stream(
         self, stream: ByteStream, metadata: dict[str, Any]
