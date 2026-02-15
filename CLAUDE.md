@@ -15,17 +15,23 @@ uv sync
 # Run examples
 uv run python examples/basic_usage.py
 
+# CLI usage
+uv run manas add-documents document.pdf          # Index documents
+uv run manas query "What are the main themes?"   # Query
+uv run manas serve --port 8000                   # Start REST API server
+uv run manas visualize                           # Generate visualizations
+
 # Lint
 ruff check manasrag/
 
 # Format
 ruff format manasrag/
 
-# Run tests (test files are in the project root, not tests/)
-uv run pytest test_*.py
+# Run tests
+uv run pytest
 ```
 
-Note: `pyproject.toml` declares `testpaths = ["tests"]` but no `tests/` directory exists. Test files live in the project root as `test_*.py`.
+Note: `pyproject.toml` declares `testpaths = ["tests"]` but no tests directory exists yet.
 
 ## Architecture
 
@@ -41,12 +47,15 @@ ManasRAG (facade)  →  Pipelines  →  Components  →  Stores
 - **Components** (`components/`): Haystack `@component`-decorated classes with `run()` methods returning dicts. Each component does one job (extract entities, detect communities, retrieve, build context, etc.).
 - **Stores** (`stores/`): Storage backends. `GraphDocumentStore` is the ABC; `NetworkXGraphStore` (in-memory) and `Neo4jGraphStore` (production, optional import) implement it. `EntityVectorStore`, `ChunkVectorStore`, and `KVStore` handle embeddings and metadata.
 - **Core** (`core/`): Pure data structures — `Entity`, `Relation`, `NodeType` enum, `Community`, `QueryParam`, `RetrievalMode` enum. No business logic.
+- **Haystack** (`haystack/`): Custom Haystack components. `MinerUToDocument` converts PDFs to Markdown using MinerU.
 
 ### Data Flow
 
 **Indexing:** Documents → `DocumentSplitter` (token-based chunking) → `EntityExtractor` (LLM with multi-pass gleaning) → `GraphIndexer` (upsert to graph store) → `CommunityDetector` (Louvain level 0, then optional hierarchical clustering with sklearn) → `CommunityReportGenerator` (LLM summaries) → vector stores
 
 **Query:** Query → `EntityRetriever` (semantic search on entity embeddings) → `HierarchicalRetriever` (mode-specific: local entities, global community reports, bridge cross-community paths) → `ContextBuilder` (assemble hierarchical context) → `PromptBuilder` → `ChatGenerator` → answer
+
+**Document Management:** `index()`, `delete()`, `update()`, `list_documents()`, `has_document()` for CRUD operations. Documents use external `doc_id` for tracking.
 
 ### Retrieval Modes
 
@@ -76,8 +85,23 @@ ManasRAG (facade)  →  Pipelines  →  Components  →  Stores
 
 Requires `OPENAI_API_KEY` (or compatible) in `.env` file. Optional `OPENAI_BASE_URL` for custom endpoints. See `.env.example`.
 
+## CLI and API
+
+**CLI** (`manas` command): `add-documents`, `query`, `serve`, `visualize`, `visualize-path`, `default-config`. Config file: `manas.yaml` or `~/.manas.yaml`.
+
+**REST API** (`manas serve`): Native endpoints at `/api/*` and OpenAI-compatible endpoints at `/v1/chat/completions` for integration with tools like Open WebUI. Install with `pip install -e ".[api]"`.
+
+## Multi-Project Isolation
+
+The `project_id` parameter isolates data per project. Each project gets its own subdirectory under `working_dir` with independent graph stores, vector stores, and communities.
+
+```python
+manas.index(documents, project_id="project_a")
+manas.query("query", project_id="project_a")
+```
+
 ## Dependencies
 
-Core: `haystack-ai>=2.6`, `networkx`, `python-louvain`, `tiktoken`, `python-dotenv`
+Core: `haystack-ai>=2.6`, `networkx`, `python-louvain`, `tiktoken`, `python-dotenv`, `mineru` (PDF parsing), `torch`
 
-Optional groups: `openai`, `neo4j`, `scikit-learn` (hierarchical clustering), `visualization` (pyvis, plotly), `dev` (pytest), `all`
+Optional groups: `openai`, `neo4j`, `scikit-learn` (hierarchical clustering), `visualization` (pyvis, plotly), `cli` (document converters), `api` (FastAPI), `webui` (Streamlit), `dev` (pytest), `all`
